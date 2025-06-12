@@ -545,14 +545,22 @@ def lanzar_gui():
                 clase_nombre = e_nombre.get()
                 clase_maestro = e_maestro.get()
                 nueva_cfgs = []
-                for e_nombre_cfg, dia1, hueco1, dia2, hueco2 in campos_cfg:
+                siglas = e_siglas.get().strip() or clase_nombre[:2].upper()
+                for campos in campos_cfg:
+                    e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
                     nombre_cfg = e_nombre_cfg.get().strip()
                     h1 = (dia1.get().strip(), hueco1.get().strip())
                     h2 = (dia2.get().strip(), hueco2.get().strip())
                     if all(h1) and all(h2) and nombre_cfg:
-                        nueva_cfgs.append(ConfiguracionClase(nombre=nombre_cfg, huecos=(h1, h2)))
+                        nueva_cfgs.append(
+                            ConfiguracionClase(
+                                nombre=nombre_cfg,
+                                huecos=(h1, h2),
+                                maestro=maestro_cfg.get().strip() if maestro_cfg else '',
+                                curso=curso_cfg.get().strip() if curso_cfg else ''
+                            )
+                        )
                 i = clases.index(clase)
-                siglas = clase_nombre[:2].upper()
                 clases[i] = Clase(nombre=clase_nombre, maestro=clase_maestro, siglas=siglas, configuraciones=nueva_cfgs)
                 refrescar()
                 win.destroy()
@@ -561,47 +569,72 @@ def lanzar_gui():
             win.title("Editar Clase")
             tk.Label(win, text="Nombre:").grid(row=0, column=0)
             tk.Label(win, text="Maestro:").grid(row=1, column=0)
-            tk.Label(win, text="Configuraciones:\n(nombre, D1, H1, D2, H2)").grid(row=2, column=0)
+            tk.Label(win, text="Siglas:").grid(row=2, column=0)
             e_nombre = tk.Entry(win)
             e_maestro = tk.Entry(win)
+            e_siglas = tk.Entry(win)
             e_nombre.insert(0, clase.nombre)
             e_maestro.insert(0, clase.maestro)
+            e_siglas.insert(0, getattr(clase, 'siglas', ''))
+            e_nombre.grid(row=0, column=1)
+            e_maestro.grid(row=1, column=1)
+            e_siglas.grid(row=2, column=1)
+
+            var_maestro_varia = tk.BooleanVar(value=True)
+            var_nombre_varia = tk.BooleanVar(value=True)
+            tk.Checkbutton(win, text="Maestro varía por configuración", variable=var_maestro_varia).grid(row=3, column=0, columnspan=2)
+            tk.Checkbutton(win, text="Nombre varía por configuración", variable=var_nombre_varia).grid(row=4, column=0, columnspan=2)
 
             campos_cfg = []
 
             cfg_frame = tk.Frame(win)
-            cfg_frame.grid(row=2, column=1)
+            cfg_frame.grid(row=5, column=1)
 
             def añadir_fila_cfg(c=None):
                 fila = tk.Frame(cfg_frame)
                 e_nombre_cfg = tk.Entry(fila, width=6)
-                dia1 = ttk.Combobox(fila, values=['L','M','X','J','V'], width=2)
-                hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2)
-                dia2 = ttk.Combobox(fila, values=['L','M','X','J','V'], width=2)
-                hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2)
+                dia1 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state='readonly')
+                hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2, state='readonly')
+                dia2 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state='readonly')
+                hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2, state='readonly')
                 if c:
                     e_nombre_cfg.insert(0, c.nombre)
                     dia1.set(c.huecos[0][0])
                     hueco1.set(c.huecos[0][1])
                     dia2.set(c.huecos[1][0])
                     hueco2.set(c.huecos[1][1])
+                widgets = [e_nombre_cfg, dia1, hueco1, dia2, hueco2]
+                maestro_cfg = None
+                curso_cfg = None
+                if var_maestro_varia.get():
+                    maestro_cfg = tk.Entry(fila, width=10)
+                    if c and getattr(c, 'maestro', None): maestro_cfg.insert(0, c.maestro)
+                    maestro_cfg.pack(side='left')
+                if var_nombre_varia.get():
+                    curso_cfg = tk.Entry(fila, width=10)
+                    if c and getattr(c, 'curso', None): curso_cfg.insert(0, c.curso)
+                    curso_cfg.pack(side='left')
+                def eliminar_fila():
+                    fila.destroy()
+                    campos_cfg.remove(entry_tuple)
+                boton_eliminar = tk.Button(fila, text='❌', command=eliminar_fila)
+                boton_eliminar.pack(side='left')
                 e_nombre_cfg.pack(side='left')
                 dia1.pack(side='left')
                 hueco1.pack(side='left')
                 dia2.pack(side='left')
                 hueco2.pack(side='left')
                 fila.pack(anchor='w', pady=2)
-                campos_cfg.append((e_nombre_cfg, dia1, hueco1, dia2, hueco2))
+                entry_tuple = (e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg)
+                campos_cfg.append(entry_tuple)
 
-            for cfg in clase.configuraciones:
+            for cfg in getattr(clase, 'configuraciones', []):
                 añadir_fila_cfg(cfg)
 
             btn_add = tk.Button(win, text="+ Añadir Configuración", command=lambda: añadir_fila_cfg())
-            btn_add.grid(row=3, column=1, sticky='w')
+            btn_add.grid(row=6, column=1, sticky='w')
 
-            e_nombre.grid(row=0, column=1)
-            e_maestro.grid(row=1, column=1)
-            tk.Button(win, text="Confirmar", command=confirmar_edicion).grid(row=4, column=0, columnspan=2)
+            tk.Button(win, text="Confirmar", command=confirmar_edicion).grid(row=7, column=0, columnspan=2)
 
         ttk.Button(btn_frame, text="Editar Clase", command=editar).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Eliminar Clase", command=eliminar).pack(side="left", padx=5)
