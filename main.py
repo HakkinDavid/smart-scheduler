@@ -5,19 +5,18 @@ from typing import List, Tuple, Dict, NamedTuple, Any
 DIA = str  # 'L','M','X','J','V'
 HUECO = str  # 'A','B','C'
 
-# Etiquetas configurables para los horarios de huecos
-ETIQUETAS_HORARIO = {
-    'A': '16:00 - 18:00',
-    'B': '18:00 - 20:00',
-    'C': '20:00 - 22:00'
-}
-
+# Centralización de días y huecos
+DIAS = [
+    ('L', 'Lunes'), ('M', 'Martes'), ('X', 'Miércoles'), ('J', 'Jueves'), ('V', 'Viernes')
+]
+HUECOS = [
+    ('A', 'Hueco 1'), ('B', 'Hueco 2'), ('C', 'Hueco 3')
+]
+ETIQUETAS_HORARIO = {k: f"{16+2*i:02d}:00 - {18+2*i:02d}:00" for i, (k, _) in enumerate(HUECOS)}
+NOMBRES_DIAS = {k: v for k, v in DIAS}
+NOMBRES_DIAS.update({v: k for k, v in DIAS})
 
 # Diccionario para traducción de días
-NOMBRES_DIAS = {
-    'L': 'Lunes', 'M': 'Martes', 'X': 'Miércoles', 'J': 'Jueves', 'V': 'Viernes',
-    'Lunes': 'L', 'Martes': 'M', 'Miércoles': 'X', 'Jueves': 'J', 'Viernes': 'V'
-}
 Coordenada = Tuple[DIA, HUECO]
 
 class ConfiguracionClase(NamedTuple):
@@ -274,25 +273,207 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 
 def lanzar_gui():
-    def cargar_archivo():
-        path = filedialog.askopenfilename(filetypes=[("JSON", "*.json")])
-        if path:
-            try:
-                clases.clear()
-                clases.extend(cargar_entrada(path))
-                messagebox.showinfo("Carga exitosa", f"Se cargaron {len(clases)} clases.")
-            except Exception as e:
-                messagebox.showerror("Error al cargar", str(e))
+    ventana = tk.Tk()
+    # --- Utilidades UI ---
+    def combo_valores_dias():
+        return [v for _, v in DIAS]
+    def combo_valores_huecos():
+        return [ETIQUETAS_HORARIO[k] for k, _ in HUECOS]
+    def clave_dia(nombre):
+        return NOMBRES_DIAS.get(nombre, nombre)
+    def clave_hueco(etiqueta):
+        for k, v in ETIQUETAS_HORARIO.items():
+            if v == etiqueta: return k
+        return etiqueta
 
-    def guardar_archivo():
-        path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
-        if path:
-            try:
-                guardar_entrada(clases, path)
-                messagebox.showinfo("Guardado", "Entrada guardada exitosamente.")
-            except Exception as e:
-                messagebox.showerror("Error al guardar", str(e))
+    # --- Editor de clases ---
+    def editar_clases():
+        editor = tk.Toplevel(ventana)
+        editor.title("Editar Clases")
+        editor.geometry("700x500")
 
+        tree = ttk.Treeview(editor, columns=("Nombre", "Maestro", "Siglas", "Configuraciones"), show="headings")
+        for col in ("Nombre", "Maestro", "Siglas", "Configuraciones"):
+            tree.heading(col, text=col)
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        def refrescar():
+            tree.delete(*tree.get_children())
+            for clase in clases:
+                confs = ", ".join(f"{cfg.nombre}:{cfg.huecos}" for cfg in clase.configuraciones)
+                tree.insert("", "end", values=(clase.nombre, clase.maestro, clase.siglas, confs))
+
+        def agregar_o_editar(clase=None):
+            win = tk.Toplevel(editor)
+            win.title("Clase" + (" - Editar" if clase else " - Nueva"))
+            # --- Encabezados generales ---
+            tk.Label(win, text="Nombre:").grid(row=0, column=0)
+            tk.Label(win, text="Maestro:").grid(row=1, column=0)
+            tk.Label(win, text="Siglas:").grid(row=2, column=0)
+            e_nombre = tk.Entry(win)
+            e_maestro = tk.Entry(win)
+            e_siglas = tk.Entry(win)
+            e_nombre.grid(row=0, column=1)
+            e_maestro.grid(row=1, column=1)
+            e_siglas.grid(row=2, column=1)
+            if clase:
+                e_nombre.insert(0, clase.nombre)
+                e_maestro.insert(0, clase.maestro)
+                e_siglas.insert(0, clase.siglas)
+            # --- Checkboxes para variabilidad ---
+            var_maestro_varia = tk.BooleanVar(value=False)
+            var_nombre_varia = tk.BooleanVar(value=False)
+            def toggle_maestro():
+                maestro_general.grid_remove() if var_maestro_varia.get() else maestro_general.grid()
+                for campos in campos_cfg:
+                    if campos[-2]: campos[-2].grid() if var_maestro_varia.get() else campos[-2].grid_remove()
+            def toggle_nombre():
+                nombre_general.grid_remove() if var_nombre_varia.get() else nombre_general.grid()
+                for campos in campos_cfg:
+                    if campos[-1]: campos[-1].grid() if var_nombre_varia.get() else campos[-1].grid_remove()
+            tk.Checkbutton(win, text="Maestro varía por configuración", variable=var_maestro_varia, command=toggle_maestro).grid(row=3, column=0, columnspan=2)
+            tk.Checkbutton(win, text="Nombre varía por configuración", variable=var_nombre_varia, command=toggle_nombre).grid(row=4, column=0, columnspan=2)
+            maestro_general = e_maestro
+            nombre_general = e_nombre
+
+            # --- Encabezados de configuraciones ---
+            cfg_frame = tk.Frame(win)
+            cfg_frame.grid(row=5, column=0, columnspan=2, sticky='ew')
+            encabezados = ["Nombre", "Día 1", "Hueco 1", "Día 2", "Hueco 2", "Maestro", "Curso", ""]
+            for i, h in enumerate(encabezados):
+                tk.Label(cfg_frame, text=h).grid(row=0, column=i, padx=2)
+            campos_cfg = []
+            def añadir_fila_cfg(c=None):
+                fila = tk.Frame(cfg_frame)
+                e_nombre_cfg = tk.Entry(fila, width=8)
+                dia1 = ttk.Combobox(fila, values=combo_valores_dias(), width=10, state="readonly")
+                hueco1 = ttk.Combobox(fila, values=combo_valores_huecos(), width=12, state="readonly")
+                dia2 = ttk.Combobox(fila, values=combo_valores_dias(), width=10, state="readonly")
+                hueco2 = ttk.Combobox(fila, values=combo_valores_huecos(), width=12, state="readonly")
+                maestro_cfg = tk.Entry(fila, width=10)
+                curso_cfg = tk.Entry(fila, width=10)
+                # Set values if editing
+                if c:
+                    e_nombre_cfg.insert(0, c.nombre)
+                    dia1.set(NOMBRES_DIAS.get(c.huecos[0][0], c.huecos[0][0]))
+                    hueco1.set(ETIQUETAS_HORARIO.get(c.huecos[0][1], c.huecos[0][1]))
+                    dia2.set(NOMBRES_DIAS.get(c.huecos[1][0], c.huecos[1][0]))
+                    hueco2.set(ETIQUETAS_HORARIO.get(c.huecos[1][1], c.huecos[1][1]))
+                    maestro_cfg.insert(0, getattr(c, 'maestro', ''))
+                    curso_cfg.insert(0, getattr(c, 'curso', ''))
+                # Packing
+                widgets = [e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg]
+                for i, w in enumerate(widgets):
+                    w.grid(row=0, column=i, padx=2)
+                # Mostrar/ocultar según checkboxes
+                maestro_cfg.grid_remove() if not var_maestro_varia.get() else maestro_cfg.grid()
+                curso_cfg.grid_remove() if not var_nombre_varia.get() else curso_cfg.grid()
+                # Botón eliminar
+                def eliminar_fila():
+                    fila.destroy()
+                    campos_cfg.remove(entry_tuple)
+                tk.Button(fila, text='❌', command=eliminar_fila, width=2).grid(row=0, column=7)
+                fila.pack(anchor='w', pady=2, fill='x')
+                entry_tuple = (e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg)
+                campos_cfg.append(entry_tuple)
+            # Si editando, cargar configuraciones existentes
+            if clase:
+                for cfg in clase.configuraciones:
+                    añadir_fila_cfg(cfg)
+            else:
+                añadir_fila_cfg()
+            tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg).grid(row=6, column=0, sticky='w')
+            # --- Confirmar ---
+            def confirmar():
+                nombre = e_nombre.get().strip()
+                maestro = e_maestro.get().strip()
+                siglas = e_siglas.get().strip() or nombre[:2].upper()
+                configuraciones = []
+                for campos in campos_cfg:
+                    e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
+                    nombre_cfg = e_nombre_cfg.get().strip()
+                    h1 = (clave_dia(dia1.get()), clave_hueco(hueco1.get()))
+                    h2 = (clave_dia(dia2.get()), clave_hueco(hueco2.get()))
+                    if all(h1) and all(h2) and nombre_cfg:
+                        configuraciones.append(
+                            ConfiguracionClase(
+                                nombre=nombre_cfg,
+                                huecos=(h1, h2),
+                                maestro=maestro_cfg.get().strip() if var_maestro_varia.get() else maestro,
+                                curso=curso_cfg.get().strip() if var_nombre_varia.get() else nombre
+                            )
+                        )
+                if clase:
+                    i = clases.index(clase)
+                    clases[i] = Clase(nombre=nombre, maestro=maestro, siglas=siglas, configuraciones=configuraciones)
+                else:
+                    clases.append(Clase(nombre=nombre, maestro=maestro, siglas=siglas, configuraciones=configuraciones))
+                refrescar()
+                win.destroy()
+            tk.Button(win, text="Confirmar", command=confirmar).grid(row=7, column=0, columnspan=2)
+            # --- Sincronizar checkboxes ---
+            toggle_maestro()
+            toggle_nombre()
+        # --- Botones ---
+        btn_frame = ttk.Frame(editor)
+        btn_frame.pack(pady=5)
+        ttk.Button(btn_frame, text="Agregar Clase", command=lambda: agregar_o_editar()).pack(side="left", padx=5)
+        def editar():
+            sel = tree.selection()
+            if not sel: return
+            idx = tree.index(sel[0])
+            agregar_o_editar(clases[idx])
+        def eliminar():
+            sel = tree.selection()
+            if not sel: return
+            idx = tree.index(sel[0])
+            clases.pop(idx)
+            refrescar()
+        ttk.Button(btn_frame, text="Editar Clase", command=editar).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Eliminar Clase", command=eliminar).pack(side="left", padx=5)
+        refrescar()
+
+    # --- Configuración avanzada de días/huecos ---
+    def configurar_dias_huecos():
+        win = tk.Toplevel(ventana)
+        win.title("Configurar Días y Huecos")
+        # Días
+        tk.Label(win, text="Días de la semana:").grid(row=0, column=0)
+        dias_vars = [tk.BooleanVar(value=True) for _ in DIAS]
+        for i, (_, nombre) in enumerate(DIAS):
+            tk.Checkbutton(win, text=nombre, variable=dias_vars[i]).grid(row=0, column=i+1)
+        # Huecos
+        tk.Label(win, text="Huecos:").grid(row=1, column=0)
+        huecos_entries = []
+        for i, (k, _) in enumerate(HUECOS):
+            tk.Label(win, text=f"Hueco {k}:").grid(row=1, column=i*2+1)
+            e = tk.Entry(win, width=10)
+            e.insert(0, ETIQUETAS_HORARIO[k])
+            e.grid(row=1, column=i*2+2)
+            huecos_entries.append((k, e))
+        def guardar():
+            # Actualizar días y huecos globales
+            global DIAS, HUECOS, ETIQUETAS_HORARIO
+            DIAS = [d for d, v in zip(DIAS, dias_vars) if v.get()]
+            HUECOS = [(k, f"Hueco {k}") for k, _ in HUECOS]
+            for k, e in huecos_entries:
+                ETIQUETAS_HORARIO[k] = e.get().strip()
+            messagebox.showinfo("Guardado", "Configuración actualizada.")
+            win.destroy()
+        tk.Button(win, text="Guardar", command=guardar).grid(row=2, column=0, columnspan=10, pady=10)
+
+    # --- Visualización de soluciones y motivo ---
+    def mostrar_motivo(sol):
+        win = tk.Toplevel(ventana)
+        win.title("Motivo de la Calificación")
+        txt = tk.Text(win, width=60, height=15)
+        txt.pack()
+        txt.insert("end", f"Puntuación: {sol.puntuacion}\n\n")
+        for k, v in sol.detalle.items():
+            txt.insert("end", f"{k}: {v}\n")
+        txt.config(state="disabled")
+
+    # --- Generación y previsualización ---
     def generar():
         if not clases:
             messagebox.showwarning("Advertencia", "No hay clases cargadas.")
@@ -303,397 +484,46 @@ def lanzar_gui():
         if not evaluadas:
             messagebox.showinfo("Resultado", "No se encontraron soluciones válidas.")
             return
-        messagebox.showinfo("Resultado", f"Mejor puntuación: {evaluadas[0].puntuacion}")
+        # Ventana de soluciones
+        ventana_sol = tk.Toplevel(ventana)
+        ventana_sol.title("Soluciones Generadas")
+        idx = [0]
+        def actualizar():
+            mostrar_matriz_color(evaluadas[idx[0]], {c.nombre: c for c in clases})
+            label.config(text=f"Solución {idx[0]+1} de {len(evaluadas)} - Puntuación: {evaluadas[idx[0]].puntuacion}")
+        def anterior():
+            if idx[0] > 0: idx[0] -= 1; actualizar()
+        def siguiente():
+            if idx[0] < len(evaluadas)-1: idx[0] += 1; actualizar()
+        def ver_motivo():
+            mostrar_motivo(evaluadas[idx[0]])
+        label = ttk.Label(ventana_sol, text="")
+        label.pack()
+        btn_frame = ttk.Frame(ventana_sol)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="Anterior", command=anterior).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Siguiente", command=siguiente).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Motivo Calificación", command=ver_motivo).pack(side="left", padx=5)
+        actualizar()
 
-        # Eliminar botones previos si existen
-        for widget in frm.grid_slaves(row=3):
-            widget.destroy()
+    # --- UI principal con pestañas ---
+    notebook = ttk.Notebook(ventana)
+    frm_editar = ttk.Frame(notebook)
+    frm_generar = ttk.Frame(notebook)
+    frm_config = ttk.Frame(notebook)
+    notebook.add(frm_editar, text="Editar Clases")
+    notebook.add(frm_generar, text="Generar Horarios")
+    notebook.add(frm_config, text="Configuración")
+    notebook.pack(fill="both", expand=True)
 
-        def ver_soluciones():
-            if not evaluadas:
-                return
-            idx = [0]
+    # --- Pestaña editar ---
+    ttk.Button(frm_editar, text="Editar Clases", command=editar_clases).pack(pady=10)
+    # --- Pestaña generar ---
+    ttk.Button(frm_generar, text="Generar Horarios", command=generar).pack(pady=10)
+    # --- Pestaña configuración ---
+    ttk.Button(frm_config, text="Configurar Días y Huecos", command=configurar_dias_huecos).pack(pady=10)
 
-            ventana_sol = tk.Toplevel(ventana)
-            ventana_sol.title("Soluciones Generadas")
-
-            canvas = tk.Canvas(ventana_sol)
-            canvas.pack()
-
-            def exportar_todo_en_lote():
-                carpeta = filedialog.askdirectory()
-                if not carpeta:
-                    return
-                for i, sol in enumerate(evaluadas, 1):
-                    fig, ax = plt.subplots(figsize=(10, 3))
-                    matriz = representar_matriz(sol.asignacion)
-                    clases_ = list(sol.asignacion.keys())
-                    random.seed(42)
-                    colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
-                    colores_asignados = {clase: colores[j % len(colores)] for j, clase in enumerate(clases_)}
-                    dia_labels = ['L', 'M', 'X', 'J', 'V']
-                    hueco_labels = [ETIQUETAS_HORARIO[h] for h in ['A', 'B', 'C']]
-                    table_data = [['' for _ in range(5)] for _ in range(3)]
-                    cell_colors = [['white' for _ in range(5)] for _ in range(3)]
-                    for clase, cfg in sol.asignacion.items():
-                        color = colores_asignados[clase]
-                        for dia, hueco in cfg.huecos:
-                            ii = {'A':0, 'B':1, 'C':2}[hueco]
-                            jj = {'L':0, 'M':1, 'X':2, 'J':3, 'V':4}[dia]
-                            table_data[ii][jj] = cfg.nombre
-                            cell_colors[ii][jj] = color
-                    table = ax.table(cellText=table_data, cellColours=cell_colors,
-                                     rowLabels=hueco_labels, colLabels=dia_labels,
-                                     loc='center', cellLoc='center')
-                    table.scale(1, 2)
-                    ax.axis('off')
-                    plt.title(f'Solución {i} - Puntuación: {sol.puntuacion}')
-                    nombre_base = f"solucion_{i}_p{sol.puntuacion}"
-                    path_img = f"{carpeta}/{nombre_base}.png"
-                    path_txt = f"{carpeta}/{nombre_base}.txt"
-                    fig.savefig(path_img)
-                    with open(path_txt, "w") as f:
-                        f.write(f"Puntuación: {sol.puntuacion}\n\n")
-                        for k, v in sol.detalle.items():
-                            f.write(f"{k}: {v}\n")
-                messagebox.showinfo("Exportado", f"Se guardaron {len(evaluadas)} soluciones en {carpeta}")
-
-            def actualizar():
-                canvas.delete("all")
-                mostrar_matriz_color(evaluadas[idx[0]])
-                label.config(text=f"Solución {idx[0]+1} de {len(evaluadas)} - Puntuación: {evaluadas[idx[0]].puntuacion}")
-
-            def anterior():
-                if idx[0] > 0:
-                    idx[0] -= 1
-                    actualizar()
-
-            def siguiente():
-                if idx[0] < len(evaluadas) - 1:
-                    idx[0] += 1
-                    actualizar()
-
-            def exportar_png():
-                sol = evaluadas[idx[0]]
-                fig, ax = plt.subplots(figsize=(10, 3))
-                matriz = representar_matriz(sol.asignacion)
-                clases_ = list(sol.asignacion.keys())
-                random.seed(42)
-                colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
-                colores_asignados = {clase: colores[i % len(colores)] for i, clase in enumerate(clases_)}
-                dia_labels = ['L', 'M', 'X', 'J', 'V']
-                hueco_labels = [ETIQUETAS_HORARIO[h] for h in ['A', 'B', 'C']]
-                table_data = [['' for _ in range(5)] for _ in range(3)]
-                cell_colors = [['white' for _ in range(5)] for _ in range(3)]
-                for clase, cfg in sol.asignacion.items():
-                    color = colores_asignados[clase]
-                    for dia, hueco in cfg.huecos:
-                        i = {'A':0, 'B':1, 'C':2}[hueco]
-                        j = {'L':0, 'M':1, 'X':2, 'J':3, 'V':4}[dia]
-                        table_data[i][j] = cfg.nombre
-                        cell_colors[i][j] = color
-                table = ax.table(cellText=table_data, cellColours=cell_colors,
-                                 rowLabels=hueco_labels, colLabels=dia_labels,
-                                 loc='center', cellLoc='center')
-                table.scale(1, 2)
-                ax.axis('off')
-                plt.title(f'Solución {idx[0]+1} - Puntuación: {sol.puntuacion}')
-                path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG", "*.png")])
-                if path:
-                    fig.savefig(path)
-                    txt_path = path.rsplit('.', 1)[0] + ".txt"
-                    with open(txt_path, "w") as f:
-                        for k, v in sol.detalle.items():
-                            f.write(f"{k}: {v}\n")
-                    messagebox.showinfo("Exportado", f"PNG y análisis TXT guardados.")
-
-            label = ttk.Label(ventana_sol, text="")
-            label.pack()
-
-            btn_frame = ttk.Frame(ventana_sol)
-            btn_frame.pack(pady=10)
-
-            ttk.Button(btn_frame, text="Anterior", command=anterior).pack(side="left", padx=5)
-            ttk.Button(btn_frame, text="Siguiente", command=siguiente).pack(side="left", padx=5)
-            ttk.Button(btn_frame, text="Exportar PNG + TXT", command=exportar_png).pack(side="left", padx=5)
-            ttk.Button(btn_frame, text="Exportar TODO", command=exportar_todo_en_lote).pack(side="left", padx=5)
-
-            actualizar()
-
-        ttk.Button(frm, text="Ver Soluciones", command=ver_soluciones).grid(column=0, row=3, columnspan=2, pady=10)
-
-    clases: List[Clase] = []
-
-    ventana = tk.Tk()
-    ventana.title("Generador de Horarios")
-
-    frm = ttk.Frame(ventana, padding=10)
-    frm.grid()
-
-    ttk.Label(frm, text="Smart Scheduler", font=("Helvetica", 16)).grid(column=0, row=0, columnspan=3, pady=10)
-
-    ttk.Button(frm, text="Cargar Clases", command=cargar_archivo).grid(column=0, row=1, padx=5, pady=5)
-    ttk.Button(frm, text="Guardar Clases", command=guardar_archivo).grid(column=1, row=1, padx=5, pady=5)
-    ttk.Button(frm, text="Generar Horarios", command=generar).grid(column=2, row=1, padx=5, pady=5)
-
-    def editar_clases():
-        editor = tk.Toplevel(ventana)
-        editor.title("Editar Clases")
-        editor.geometry("600x400")
-
-        tree = ttk.Treeview(editor, columns=("Maestro", "Configuraciones"), show="headings")
-        tree.heading("Maestro", text="Maestro")
-        tree.heading("Configuraciones", text="Configuraciones")
-        tree.pack(fill="both", expand=True, padx=10, pady=10)
-
-        def refrescar():
-            tree.delete(*tree.get_children())
-            for clase in clases:
-                confs = ", ".join(f"{cfg.nombre}:{cfg.huecos}" for cfg in clase.configuraciones)
-                tree.insert("", "end", values=(clase.maestro, confs), text=clase.nombre)
-
-        def agregar():
-            def confirmar():
-                nombre = e_nombre.get()
-                maestro = e_maestro.get()
-                siglas = e_siglas.get().strip() or nombre[:2].upper()
-                configuraciones = []
-                for campos in campos_cfg:
-                    # unpack with possible None for maestro_cfg, curso_cfg
-                    e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
-                    nombre_cfg = e_nombre_cfg.get().strip()
-                    h1 = (
-                        NOMBRES_DIAS.get(dia1.get().strip(), dia1.get().strip()),
-                        hueco1.get().strip()
-                    )
-                    h2 = (
-                        NOMBRES_DIAS.get(dia2.get().strip(), dia2.get().strip()),
-                        hueco2.get().strip()
-                    )
-                    if all(h1) and all(h2) and nombre_cfg:
-                        configuraciones.append(
-                            ConfiguracionClase(
-                                nombre=nombre_cfg,
-                                huecos=(h1, h2),
-                                maestro=maestro_cfg.get().strip() if maestro_cfg else '',
-                                curso=curso_cfg.get().strip() if curso_cfg else ''
-                            )
-                        )
-                clases.append(Clase(nombre=nombre, maestro=maestro, siglas=siglas, configuraciones=configuraciones))
-                refrescar()
-                win.destroy()
-
-            win = tk.Toplevel(editor)
-            win.title("Nueva Clase")
-            tk.Label(win, text="Nombre:").grid(row=0, column=0)
-            tk.Label(win, text="Maestro:").grid(row=1, column=0)
-            e_nombre = tk.Entry(win)
-            e_maestro = tk.Entry(win)
-            e_nombre.grid(row=0, column=1)
-            e_maestro.grid(row=1, column=1)
-            # Siglas
-            tk.Label(win, text="Siglas:").grid(row=2, column=0)
-            e_siglas = tk.Entry(win)
-            e_siglas.grid(row=2, column=1)
-            # Checkboxes para variabilidad
-            var_maestro_varia = tk.BooleanVar()
-            var_nombre_varia = tk.BooleanVar()
-            tk.Checkbutton(win, text="Maestro varía por configuración", variable=var_maestro_varia).grid(row=3, column=0, columnspan=2)
-            tk.Checkbutton(win, text="Nombre varía por configuración", variable=var_nombre_varia).grid(row=4, column=0, columnspan=2)
-
-            campos_cfg = []
-
-            cfg_frame = tk.Frame(win)
-            cfg_frame.grid(row=5, column=1)
-
-            def añadir_fila_cfg():
-                fila = tk.Frame(cfg_frame)
-                e_nombre_cfg = tk.Entry(fila, width=6)
-                dia1 = ttk.Combobox(fila, values=[NOMBRES_DIAS [d] for d in ['Lunes','Martes','Miércoles','Jueves','Viernes']], width=10, state="readonly")
-                hueco1 = ttk.Combobox(fila, values=[ETIQUETAS_HORARIO [h] for h in ['A','B','C']], width=2, state="readonly")
-                dia2 = ttk.Combobox(fila, values=[NOMBRES_DIAS [d] for d in ['Lunes','Martes','Miércoles','Jueves','Viernes']], width=10, state="readonly")
-                hueco2 = ttk.Combobox(fila, values=[ETIQUETAS_HORARIO [h] for h in ['A','B','C']], width=2, state="readonly")
-                e_nombre_cfg.pack(side='left')
-                dia1.pack(side='left')
-                hueco1.pack(side='left')
-                dia2.pack(side='left')
-                hueco2.pack(side='left')
-                # Añadir campos extra según checkbox
-                campos = [e_nombre_cfg, dia1, hueco1, dia2, hueco2]
-                if var_maestro_varia.get():
-                    e_maestro_cfg = tk.Entry(fila, width=10)
-                    e_maestro_cfg.pack(side='left')
-                    campos.append(e_maestro_cfg)
-                else:
-                    campos.append(None)
-                if var_nombre_varia.get():
-                    e_curso_cfg = tk.Entry(fila, width=10)
-                    e_curso_cfg.pack(side='left')
-                    campos.append(e_curso_cfg)
-                else:
-                    campos.append(None)
-                fila.pack(anchor='w', pady=2)
-                campos_cfg.append(tuple(campos))
-
-            btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
-            btn_add.grid(row=6, column=1, sticky='w')
-            añadir_fila_cfg()
-
-            tk.Button(win, text="Confirmar", command=confirmar).grid(row=7, column=0, columnspan=2)
-
-        btn_frame = ttk.Frame(editor)
-        btn_frame.pack(pady=5)
-        ttk.Button(btn_frame, text="Agregar Clase", command=agregar).pack(side="left", padx=5)
-        def eliminar():
-            sel = tree.selection()
-            if not sel:
-                return
-            nombre = tree.item(sel[0], 'text')
-            clases[:] = [c for c in clases if c.nombre != nombre]
-            refrescar()
-
-        def editar():
-            sel = tree.selection()
-            if not sel:
-                return
-            nombre = tree.item(sel[0], 'text')
-            clase = next((c for c in clases if c.nombre == nombre), None)
-            if not clase:
-                return
-
-            def confirmar_edicion():
-                clase_nombre = e_nombre.get()
-                clase_maestro = e_maestro.get()
-                nueva_cfgs = []
-                siglas = e_siglas.get().strip() or clase_nombre[:2].upper()
-                for campos in campos_cfg:
-                    e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
-                    nombre_cfg = e_nombre_cfg.get().strip()
-                    h1 = (
-                        NOMBRES_DIAS.get(dia1.get().strip(), dia1.get().strip()),
-                        hueco1.get().strip()
-                    )
-                    h2 = (
-                        NOMBRES_DIAS.get(dia2.get().strip(), dia2.get().strip()),
-                        hueco2.get().strip()
-                    )
-                    if all(h1) and all(h2) and nombre_cfg:
-                        nueva_cfgs.append(
-                            ConfiguracionClase(
-                                nombre=nombre_cfg,
-                                huecos=(h1, h2),
-                                maestro=maestro_cfg.get().strip() if maestro_cfg else '',
-                                curso=curso_cfg.get().strip() if curso_cfg else ''
-                            )
-                        )
-                i = clases.index(clase)
-                clases[i] = Clase(nombre=clase_nombre, maestro=clase_maestro, siglas=siglas, configuraciones=nueva_cfgs)
-                refrescar()
-                win.destroy()
-
-            win = tk.Toplevel(editor)
-            win.title("Editar Clase")
-            tk.Label(win, text="Nombre:").grid(row=0, column=0)
-            tk.Label(win, text="Maestro:").grid(row=1, column=0)
-            tk.Label(win, text="Siglas:").grid(row=2, column=0)
-            e_nombre = tk.Entry(win)
-            e_maestro = tk.Entry(win)
-            e_siglas = tk.Entry(win)
-            e_nombre.insert(0, clase.nombre)
-            e_maestro.insert(0, clase.maestro)
-            e_siglas.insert(0, getattr(clase, 'siglas', ''))
-            e_nombre.grid(row=0, column=1)
-            e_maestro.grid(row=1, column=1)
-            e_siglas.grid(row=2, column=1)
-
-            var_maestro_varia = tk.BooleanVar(value=True)
-            var_nombre_varia = tk.BooleanVar(value=True)
-            tk.Checkbutton(win, text="Maestro varía por configuración", variable=var_maestro_varia).grid(row=3, column=0, columnspan=2)
-            tk.Checkbutton(win, text="Nombre varía por configuración", variable=var_nombre_varia).grid(row=4, column=0, columnspan=2)
-
-            campos_cfg = []
-
-            cfg_frame = tk.Frame(win)
-            cfg_frame.grid(row=5, column=1)
-
-            def añadir_fila_cfg(c=None):
-                fila = tk.Frame(cfg_frame)
-                e_nombre_cfg = tk.Entry(fila, width=6)
-                dia1 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
-                hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2)
-                dia2 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
-                hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2)
-                if c:
-                    e_nombre_cfg.insert(0, c.nombre)
-                    dia1.set(NOMBRES_DIAS.get(c.huecos[0][0], c.huecos[0][0]) if c.huecos[0][0] in NOMBRES_DIAS else c.huecos[0][0])
-                    hueco1.set(c.huecos[0][1])
-                    dia2.set(NOMBRES_DIAS.get(c.huecos[1][0], c.huecos[1][0]) if c.huecos[1][0] in NOMBRES_DIAS else c.huecos[1][0])
-                    hueco2.set(c.huecos[1][1])
-                widgets = [e_nombre_cfg, dia1, hueco1, dia2, hueco2]
-                maestro_cfg = None
-                curso_cfg = None
-                if var_maestro_varia.get():
-                    maestro_cfg = tk.Entry(fila, width=10)
-                    if c and getattr(c, 'maestro', None): maestro_cfg.insert(0, c.maestro)
-                    maestro_cfg.pack(side='left')
-                if var_nombre_varia.get():
-                    curso_cfg = tk.Entry(fila, width=10)
-                    if c and getattr(c, 'curso', None): curso_cfg.insert(0, c.curso)
-                    curso_cfg.pack(side='left')
-                def eliminar_fila():
-                    fila.destroy()
-                    campos_cfg.remove(entry_tuple)
-                boton_eliminar = tk.Button(fila, text='❌', command=eliminar_fila)
-                boton_eliminar.pack(side='left')
-                e_nombre_cfg.pack(side='left')
-                dia1.pack(side='left')
-                hueco1.pack(side='left')
-                dia2.pack(side='left')
-                hueco2.pack(side='left')
-                fila.pack(anchor='w', pady=2)
-                entry_tuple = (e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg)
-                campos_cfg.append(entry_tuple)
-
-            for cfg in getattr(clase, 'configuraciones', []):
-                añadir_fila_cfg(cfg)
-
-            btn_add = tk.Button(win, text="+ Añadir Configuración", command=lambda: añadir_fila_cfg())
-            btn_add.grid(row=6, column=1, sticky='w')
-
-            tk.Button(win, text="Confirmar", command=confirmar_edicion).grid(row=7, column=0, columnspan=2)
-
-        ttk.Button(btn_frame, text="Editar Clase", command=editar).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Eliminar Clase", command=eliminar).pack(side="left", padx=5)
-
-        refrescar()
-
-    ttk.Button(frm, text="Editar Clases", command=editar_clases).grid(column=1, row=2, columnspan=1, pady=5)
-
-    # === Nuevo: Configuración de horas de huecos ===
-    def configurar_horas():
-        win = tk.Toplevel(ventana)
-        win.title("Configurar Horas de Huecos")
-
-        campos = {}
-
-        for i, hueco in enumerate(['A', 'B', 'C']):
-            tk.Label(win, text=f"Hueco {hueco}:").grid(row=i, column=0)
-            e = tk.Entry(win, width=20)
-            e.insert(0, ETIQUETAS_HORARIO.get(hueco, ''))
-            e.grid(row=i, column=1)
-            campos[hueco] = e
-
-        def guardar():
-            for h, entry in campos.items():
-                ETIQUETAS_HORARIO[h] = entry.get().strip()
-            messagebox.showinfo("Guardado", "Horas actualizadas.")
-            win.destroy()
-
-        tk.Button(win, text="Guardar", command=guardar).grid(row=3, column=0, columnspan=2, pady=10)
-
-    # Botón para la configuración de horas, debajo de "Editar Clases"
-    ttk.Button(frm, text="Configurar Horas", command=configurar_horas).grid(column=2, row=2, columnspan=1, pady=5)
-
+    ventana.title("Smart Scheduler")
     ventana.mainloop()
 
 if __name__ == '__main__':
