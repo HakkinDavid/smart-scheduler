@@ -442,14 +442,23 @@ def lanzar_gui():
             def confirmar():
                 nombre = e_nombre.get()
                 maestro = e_maestro.get()
+                siglas = e_siglas.get().strip() or nombre[:2].upper()
                 configuraciones = []
-                for e_nombre_cfg, dia1, hueco1, dia2, hueco2 in campos_cfg:
+                for campos in campos_cfg:
+                    # unpack with possible None for maestro_cfg, curso_cfg
+                    e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
                     nombre_cfg = e_nombre_cfg.get().strip()
                     h1 = (dia1.get().strip(), hueco1.get().strip())
                     h2 = (dia2.get().strip(), hueco2.get().strip())
                     if all(h1) and all(h2) and nombre_cfg:
-                        configuraciones.append(ConfiguracionClase(nombre=nombre_cfg, huecos=(h1, h2)))
-                siglas = nombre[:2].upper()
+                        configuraciones.append(
+                            ConfiguracionClase(
+                                nombre=nombre_cfg,
+                                huecos=(h1, h2),
+                                maestro=maestro_cfg.get().strip() if maestro_cfg else '',
+                                curso=curso_cfg.get().strip() if curso_cfg else ''
+                            )
+                        )
                 clases.append(Clase(nombre=nombre, maestro=maestro, siglas=siglas, configuraciones=configuraciones))
                 refrescar()
                 win.destroy()
@@ -458,16 +467,24 @@ def lanzar_gui():
             win.title("Nueva Clase")
             tk.Label(win, text="Nombre:").grid(row=0, column=0)
             tk.Label(win, text="Maestro:").grid(row=1, column=0)
-            tk.Label(win, text="Configuraciones:").grid(row=2, column=0)
             e_nombre = tk.Entry(win)
             e_maestro = tk.Entry(win)
             e_nombre.grid(row=0, column=1)
             e_maestro.grid(row=1, column=1)
+            # Siglas
+            tk.Label(win, text="Siglas:").grid(row=2, column=0)
+            e_siglas = tk.Entry(win)
+            e_siglas.grid(row=2, column=1)
+            # Checkboxes para variabilidad
+            var_maestro_varia = tk.BooleanVar()
+            var_nombre_varia = tk.BooleanVar()
+            tk.Checkbutton(win, text="Maestro varía por configuración", variable=var_maestro_varia).grid(row=3, column=0, columnspan=2)
+            tk.Checkbutton(win, text="Nombre varía por configuración", variable=var_nombre_varia).grid(row=4, column=0, columnspan=2)
 
             campos_cfg = []
 
             cfg_frame = tk.Frame(win)
-            cfg_frame.grid(row=2, column=1)
+            cfg_frame.grid(row=5, column=1)
 
             def añadir_fila_cfg():
                 fila = tk.Frame(cfg_frame)
@@ -481,14 +498,28 @@ def lanzar_gui():
                 hueco1.pack(side='left')
                 dia2.pack(side='left')
                 hueco2.pack(side='left')
+                # Añadir campos extra según checkbox
+                campos = [e_nombre_cfg, dia1, hueco1, dia2, hueco2]
+                if var_maestro_varia.get():
+                    e_maestro_cfg = tk.Entry(fila, width=10)
+                    e_maestro_cfg.pack(side='left')
+                    campos.append(e_maestro_cfg)
+                else:
+                    campos.append(None)
+                if var_nombre_varia.get():
+                    e_curso_cfg = tk.Entry(fila, width=10)
+                    e_curso_cfg.pack(side='left')
+                    campos.append(e_curso_cfg)
+                else:
+                    campos.append(None)
                 fila.pack(anchor='w', pady=2)
-                campos_cfg.append((e_nombre_cfg, dia1, hueco1, dia2, hueco2))
+                campos_cfg.append(tuple(campos))
 
             btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
-            btn_add.grid(row=3, column=1, sticky='w')
+            btn_add.grid(row=6, column=1, sticky='w')
             añadir_fila_cfg()
 
-            tk.Button(win, text="Confirmar", command=confirmar).grid(row=4, column=0, columnspan=2)
+            tk.Button(win, text="Confirmar", command=confirmar).grid(row=7, column=0, columnspan=2)
 
         btn_frame = ttk.Frame(editor)
         btn_frame.pack(pady=5)
