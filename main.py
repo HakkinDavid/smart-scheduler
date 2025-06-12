@@ -5,6 +5,14 @@ from typing import List, Tuple, Dict, NamedTuple, Any
 DIA = str  # 'L','M','X','J','V'
 HUECO = str  # 'A','B','C'
 
+# Etiquetas configurables para los horarios de huecos
+ETIQUETAS_HORARIO = {
+    'A': '16:00 - 18:00',
+    'B': '18:00 - 20:00',
+    'C': '20:00 - 22:00'
+}
+
+
 # Diccionario para traducción de días
 NOMBRES_DIAS = {
     'L': 'Lunes', 'M': 'Martes', 'X': 'Miércoles', 'J': 'Jueves', 'V': 'Viernes',
@@ -160,7 +168,7 @@ def mostrar_matriz_color(solucion: Solucion, clases_dict: Dict[str, Clase] = Non
     colores_asignados = {clase: colores[i % len(colores)] for i, clase in enumerate(clases)}
 
     dia_labels = ['L', 'M', 'X', 'J', 'V']
-    hueco_labels = ['A', 'B', 'C']
+    hueco_labels = [ETIQUETAS_HORARIO[h] for h in ['A', 'B', 'C']]
 
     table_data = [['' for _ in range(5)] for _ in range(3)]
     cell_colors = [['white' for _ in range(5)] for _ in range(3)]
@@ -325,7 +333,7 @@ def lanzar_gui():
                     colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
                     colores_asignados = {clase: colores[j % len(colores)] for j, clase in enumerate(clases_)}
                     dia_labels = ['L', 'M', 'X', 'J', 'V']
-                    hueco_labels = ['A', 'B', 'C']
+                    hueco_labels = [ETIQUETAS_HORARIO[h] for h in ['A', 'B', 'C']]
                     table_data = [['' for _ in range(5)] for _ in range(3)]
                     cell_colors = [['white' for _ in range(5)] for _ in range(3)]
                     for clase, cfg in sol.asignacion.items():
@@ -375,7 +383,7 @@ def lanzar_gui():
                 colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
                 colores_asignados = {clase: colores[i % len(colores)] for i, clase in enumerate(clases_)}
                 dia_labels = ['L', 'M', 'X', 'J', 'V']
-                hueco_labels = ['A', 'B', 'C']
+                hueco_labels = [ETIQUETAS_HORARIO[h] for h in ['A', 'B', 'C']]
                 table_data = [['' for _ in range(5)] for _ in range(3)]
                 cell_colors = [['white' for _ in range(5)] for _ in range(3)]
                 for clase, cfg in sol.asignacion.items():
@@ -661,6 +669,31 @@ def lanzar_gui():
         refrescar()
 
     ttk.Button(frm, text="Editar Clases", command=editar_clases).grid(column=1, row=2, columnspan=1, pady=5)
+
+    # === Nuevo: Configuración de horas de huecos ===
+    def configurar_horas():
+        win = tk.Toplevel(ventana)
+        win.title("Configurar Horas de Huecos")
+
+        campos = {}
+
+        for i, hueco in enumerate(['A', 'B', 'C']):
+            tk.Label(win, text=f"Hueco {hueco}:").grid(row=i, column=0)
+            e = tk.Entry(win, width=20)
+            e.insert(0, ETIQUETAS_HORARIO.get(hueco, ''))
+            e.grid(row=i, column=1)
+            campos[hueco] = e
+
+        def guardar():
+            for h, entry in campos.items():
+                ETIQUETAS_HORARIO[h] = entry.get().strip()
+            messagebox.showinfo("Guardado", "Horas actualizadas.")
+            win.destroy()
+
+        tk.Button(win, text="Guardar", command=guardar).grid(row=3, column=0, columnspan=2, pady=10)
+
+    # Botón para la configuración de horas, debajo de "Editar Clases"
+    ttk.Button(frm, text="Configurar Horas", command=configurar_horas).grid(column=2, row=2, columnspan=1, pady=5)
 
     ventana.mainloop()
 
