@@ -9,10 +9,13 @@ Coordenada = Tuple[DIA, HUECO]
 class ConfiguracionClase(NamedTuple):
     nombre: str
     huecos: Tuple[Coordenada, Coordenada]
+    maestro: str = ''
+    curso: str = ''
 
 class Clase(NamedTuple):
     nombre: str
     maestro: str
+    siglas: str
     configuraciones: List[ConfiguracionClase]
 
 class Solucion(NamedTuple):
@@ -117,19 +120,21 @@ def evaluar(solucion: Dict[str, ConfiguracionClase]) -> Solucion:
     return Solucion(asignacion=solucion, puntuacion=puntos, detalle=detalle)
 
 # Representación matricial (sin visualización gráfica)
-def representar_matriz(solucion: Dict[str, ConfiguracionClase]) -> List[List[str]]:
+def representar_matriz(solucion: Dict[str, ConfiguracionClase], clases_dict: Dict[str, Clase] = None) -> List[List[str]]:
     """
-    Genera una matriz 5x3 con etiquetas de configuración-clase o cadenas vacías.
+    Genera una matriz 5x3 con etiquetas de siglas y configuración, o cadenas vacías.
     Filas en orden A, B, C; columnas en orden L,M,X,J,V.
     """
     matriz = [['' for _ in range(5)] for _ in range(3)]
     dia_idx = {'L':0,'M':1,'X':2,'J':3,'V':4}
     hueco_idx = {'A':0,'B':1,'C':2}
-    for cfg in solucion.values():
+    for clase_nombre, cfg in solucion.items():
         for dia, hueco in cfg.huecos:
             i = hueco_idx[hueco]
             j = dia_idx[dia]
-            matriz[i][j] = cfg.nombre
+            siglas = clases_dict[clase_nombre].siglas if clases_dict and clase_nombre in clases_dict else clase_nombre[:2].upper()
+            etiqueta = f"{siglas} @ {cfg.nombre}"
+            matriz[i][j] = etiqueta
     return matriz
 
 # === Visualización gráfica con matplotlib ===
@@ -137,9 +142,9 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import random
 
-def mostrar_matriz_color(solucion: Solucion):
+def mostrar_matriz_color(solucion: Solucion, clases_dict: Dict[str, Clase] = None):
     fig, ax = plt.subplots(figsize=(10, 3))
-    matriz = representar_matriz(solucion.asignacion)
+    matriz = representar_matriz(solucion.asignacion, clases_dict)
 
     # Colores únicos por clase
     clases = list(solucion.asignacion.keys())
@@ -158,7 +163,9 @@ def mostrar_matriz_color(solucion: Solucion):
         for dia, hueco in cfg.huecos:
             i = {'A':0, 'B':1, 'C':2}[hueco]
             j = {'L':0, 'M':1, 'X':2, 'J':3, 'V':4}[dia]
-            table_data[i][j] = cfg.nombre
+            siglas = clases_dict[clase].siglas if clases_dict and clase in clases_dict else clase[:2].upper()
+            etiqueta = f"{siglas} @ {cfg.nombre}"
+            table_data[i][j] = etiqueta
             cell_colors[i][j] = color
 
     table = ax.table(cellText=table_data, cellColours=cell_colors,
@@ -167,6 +174,22 @@ def mostrar_matriz_color(solucion: Solucion):
     table.scale(1, 2)
     ax.axis('off')
     plt.title(f'Configuración global - Puntuación: {solucion.puntuacion}')
+
+    # Leyenda a la derecha del horario
+    leyenda = []
+    for clase, cfg in solucion.asignacion.items():
+        base = clases_dict[clase] if clases_dict and clase in clases_dict else None
+        color = colores_asignados[clase]
+        siglas = base.siglas if base else clase[:2].upper()
+        maestro = cfg.maestro or (base.maestro if base else '')
+        curso = cfg.curso or (base.nombre if base else '')
+        grupo = cfg.nombre
+        leyenda.append((color, f"{siglas} ({curso}) | {maestro} | Grupo: {grupo}"))
+
+    for i, (color, texto) in enumerate(leyenda):
+        ax.text(1.02, 0.9 - 0.05 * i, texto, transform=ax.transAxes,
+                fontsize=8, color='black', backgroundcolor=color, verticalalignment='top')
+
     plt.show()
 
 
@@ -179,10 +202,13 @@ def guardar_entrada(clases: List[Clase], ruta: str):
         data.append({
             'nombre': c.nombre,
             'maestro': c.maestro,
+            'siglas': getattr(c, 'siglas', c.nombre[:2].upper()),
             'configuraciones': [
                 {
                     'nombre': cfg.nombre,
-                    'huecos': list(cfg.huecos)
+                    'huecos': list(cfg.huecos),
+                    'maestro': getattr(cfg, 'maestro', ''),
+                    'curso': getattr(cfg, 'curso', '')
                 } for cfg in c.configuraciones
             ]
         })
@@ -195,10 +221,20 @@ def cargar_entrada(ruta: str) -> List[Clase]:
     clases = []
     for c in data:
         configuraciones = [
-            ConfiguracionClase(nombre=cfg['nombre'], huecos=tuple(tuple(h) for h in cfg['huecos']))
+            ConfiguracionClase(
+                nombre=cfg['nombre'],
+                huecos=tuple(tuple(h) for h in cfg['huecos']),
+                maestro=cfg.get('maestro', ''),
+                curso=cfg.get('curso', '')
+            )
             for cfg in c['configuraciones']
         ]
-        clases.append(Clase(nombre=c['nombre'], maestro=c['maestro'], configuraciones=configuraciones))
+        clases.append(Clase(
+            nombre=c['nombre'],
+            maestro=c['maestro'],
+            siglas=c.get('siglas', c['nombre'][:2].upper()),
+            configuraciones=configuraciones
+        ))
     return clases
 
 def guardar_salida(soluciones: List[Solucion], ruta: str):
@@ -413,7 +449,8 @@ def lanzar_gui():
                     h2 = (dia2.get().strip(), hueco2.get().strip())
                     if all(h1) and all(h2) and nombre_cfg:
                         configuraciones.append(ConfiguracionClase(nombre=nombre_cfg, huecos=(h1, h2)))
-                clases.append(Clase(nombre=nombre, maestro=maestro, configuraciones=configuraciones))
+                siglas = nombre[:2].upper()
+                clases.append(Clase(nombre=nombre, maestro=maestro, siglas=siglas, configuraciones=configuraciones))
                 refrescar()
                 win.destroy()
 
@@ -484,7 +521,8 @@ def lanzar_gui():
                     if all(h1) and all(h2) and nombre_cfg:
                         nueva_cfgs.append(ConfiguracionClase(nombre=nombre_cfg, huecos=(h1, h2)))
                 i = clases.index(clase)
-                clases[i] = Clase(nombre=clase_nombre, maestro=clase_maestro, configuraciones=nueva_cfgs)
+                siglas = clase_nombre[:2].upper()
+                clases[i] = Clase(nombre=clase_nombre, maestro=clase_maestro, siglas=siglas, configuraciones=nueva_cfgs)
                 refrescar()
                 win.destroy()
 
