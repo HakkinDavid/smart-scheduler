@@ -144,7 +144,6 @@ def representar_matriz(solucion: Dict[str, ConfiguracionClase], clases_dict: Dic
     hueco_idx = {'A':0,'B':1,'C':2}
     for clase_nombre, cfg in solucion.items():
         for dia, hueco in cfg.huecos:
-            dia = NOMBRES_DIAS.get(dia, dia)
             j = dia_idx[dia]
             siglas = clases_dict[clase_nombre].siglas if clases_dict and clase_nombre in clases_dict else clase_nombre[:2].upper()
             etiqueta = f"{siglas} @ {cfg.nombre}"
@@ -510,10 +509,10 @@ def lanzar_gui():
             def añadir_fila_cfg():
                 fila = tk.Frame(cfg_frame)
                 e_nombre_cfg = tk.Entry(fila, width=6)
-                dia1 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
-                hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2)
-                dia2 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
-                hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2)
+                dia1 = ttk.Combobox(fila, values=[NOMBRES_DIAS [d] for d in ['Lunes','Martes','Miércoles','Jueves','Viernes']], width=10, state="readonly")
+                hueco1 = ttk.Combobox(fila, values=[ETIQUETAS_HORARIO [h] for h in ['A','B','C']], width=2, state="readonly")
+                dia2 = ttk.Combobox(fila, values=[NOMBRES_DIAS [d] for d in ['Lunes','Martes','Miércoles','Jueves','Viernes']], width=10, state="readonly")
+                hueco2 = ttk.Combobox(fila, values=[ETIQUETAS_HORARIO [h] for h in ['A','B','C']], width=2, state="readonly")
                 e_nombre_cfg.pack(side='left')
                 dia1.pack(side='left')
                 hueco1.pack(side='left')
