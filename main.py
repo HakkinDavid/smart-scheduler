@@ -4,6 +4,12 @@ from typing import List, Tuple, Dict, NamedTuple, Any
 # Definiciones de tipos
 DIA = str  # 'L','M','X','J','V'
 HUECO = str  # 'A','B','C'
+
+# Diccionario para traducción de días
+NOMBRES_DIAS = {
+    'L': 'Lunes', 'M': 'Martes', 'X': 'Miércoles', 'J': 'Jueves', 'V': 'Viernes',
+    'Lunes': 'L', 'Martes': 'M', 'Miércoles': 'X', 'Jueves': 'J', 'Viernes': 'V'
+}
 Coordenada = Tuple[DIA, HUECO]
 
 class ConfiguracionClase(NamedTuple):
@@ -130,11 +136,12 @@ def representar_matriz(solucion: Dict[str, ConfiguracionClase], clases_dict: Dic
     hueco_idx = {'A':0,'B':1,'C':2}
     for clase_nombre, cfg in solucion.items():
         for dia, hueco in cfg.huecos:
-            i = hueco_idx[hueco]
+            dia = NOMBRES_DIAS.get(dia, dia)
             j = dia_idx[dia]
             siglas = clases_dict[clase_nombre].siglas if clases_dict and clase_nombre in clases_dict else clase_nombre[:2].upper()
             etiqueta = f"{siglas} @ {cfg.nombre}"
-            matriz[i][j] = etiqueta
+            i = hueco_idx[hueco]
+            matriz[i][j] = cfg.nombre
     return matriz
 
 # === Visualización gráfica con matplotlib ===
@@ -448,8 +455,14 @@ def lanzar_gui():
                     # unpack with possible None for maestro_cfg, curso_cfg
                     e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
                     nombre_cfg = e_nombre_cfg.get().strip()
-                    h1 = (dia1.get().strip(), hueco1.get().strip())
-                    h2 = (dia2.get().strip(), hueco2.get().strip())
+                    h1 = (
+                        NOMBRES_DIAS.get(dia1.get().strip(), dia1.get().strip()),
+                        hueco1.get().strip()
+                    )
+                    h2 = (
+                        NOMBRES_DIAS.get(dia2.get().strip(), dia2.get().strip()),
+                        hueco2.get().strip()
+                    )
                     if all(h1) and all(h2) and nombre_cfg:
                         configuraciones.append(
                             ConfiguracionClase(
@@ -489,9 +502,9 @@ def lanzar_gui():
             def añadir_fila_cfg():
                 fila = tk.Frame(cfg_frame)
                 e_nombre_cfg = tk.Entry(fila, width=6)
-                dia1 = ttk.Combobox(fila, values=['L','M','X','J','V'], width=2)
+                dia1 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
                 hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2)
-                dia2 = ttk.Combobox(fila, values=['L','M','X','J','V'], width=2)
+                dia2 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
                 hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2)
                 e_nombre_cfg.pack(side='left')
                 dia1.pack(side='left')
@@ -549,8 +562,14 @@ def lanzar_gui():
                 for campos in campos_cfg:
                     e_nombre_cfg, dia1, hueco1, dia2, hueco2, maestro_cfg, curso_cfg = campos
                     nombre_cfg = e_nombre_cfg.get().strip()
-                    h1 = (dia1.get().strip(), hueco1.get().strip())
-                    h2 = (dia2.get().strip(), hueco2.get().strip())
+                    h1 = (
+                        NOMBRES_DIAS.get(dia1.get().strip(), dia1.get().strip()),
+                        hueco1.get().strip()
+                    )
+                    h2 = (
+                        NOMBRES_DIAS.get(dia2.get().strip(), dia2.get().strip()),
+                        hueco2.get().strip()
+                    )
                     if all(h1) and all(h2) and nombre_cfg:
                         nueva_cfgs.append(
                             ConfiguracionClase(
@@ -593,15 +612,15 @@ def lanzar_gui():
             def añadir_fila_cfg(c=None):
                 fila = tk.Frame(cfg_frame)
                 e_nombre_cfg = tk.Entry(fila, width=6)
-                dia1 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state='readonly')
-                hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2, state='readonly')
-                dia2 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state='readonly')
-                hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2, state='readonly')
+                dia1 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
+                hueco1 = ttk.Combobox(fila, values=['A','B','C'], width=2)
+                dia2 = ttk.Combobox(fila, values=['Lunes','Martes','Miércoles','Jueves','Viernes'], width=10, state="readonly")
+                hueco2 = ttk.Combobox(fila, values=['A','B','C'], width=2)
                 if c:
                     e_nombre_cfg.insert(0, c.nombre)
-                    dia1.set(c.huecos[0][0])
+                    dia1.set(NOMBRES_DIAS.get(c.huecos[0][0], c.huecos[0][0]) if c.huecos[0][0] in NOMBRES_DIAS else c.huecos[0][0])
                     hueco1.set(c.huecos[0][1])
-                    dia2.set(c.huecos[1][0])
+                    dia2.set(NOMBRES_DIAS.get(c.huecos[1][0], c.huecos[1][0]) if c.huecos[1][0] in NOMBRES_DIAS else c.huecos[1][0])
                     hueco2.set(c.huecos[1][1])
                 widgets = [e_nombre_cfg, dia1, hueco1, dia2, hueco2]
                 maestro_cfg = None
