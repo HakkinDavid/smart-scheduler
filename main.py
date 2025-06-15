@@ -5,8 +5,8 @@ semanales para un conjunto de clases universitarias, eligiendo por cada clase un
 válida (par de huecos semanales) sin colisiones. Cada clase tiene un conjunto predefinido de 
 configuraciones-clase que indican en qué días y huecos puede impartirse.
 
-Cada hueco está definido por un día (Lunes a Viernes) y una posición dentro del día (A, B o C),
-formando una cuadrícula de 5 columnas (días) por 3 filas (huecos).
+Cada hueco está definido por un día (Rango personalizable) y una posición dentro del día (A, B, C, etc.),
+formando una cuadrícula.
 
 La aplicación:
 - Evalúa cada configuración global según un sistema de puntuación por "comodidad" del horario.
@@ -487,17 +487,19 @@ class SmartSchedulerApp(tk.Tk):
                 messagebox.showerror("Error al cargar", str(e))
 
     def clase_form(self, tree, clase: Optional[Clase] = None):
-        win = tk.Toplevel(self)
-        win.title("Editar Clase" if clase else "Nueva Clase")
+        # Reemplaza el contenido principal en vez de abrir ventana nueva
+        self.clear_main()
+        frm = ttk.Frame(self.main_frame)
+        frm.pack(fill='both', expand=True, padx=10, pady=10)
         # Etiquetas para campos de texto
-        tk.Label(win, text="Nombre del curso:").grid(row=0, column=0, sticky='w')
-        tk.Label(win, text="Siglas:").grid(row=1, column=0, sticky='w')
-        tk.Label(win, text="Maestro global:").grid(row=2, column=0, sticky='w')
-        tk.Label(win, text="N° de huecos por configuración:").grid(row=3, column=0, sticky='w')
-        e_nombre = tk.Entry(win)
-        e_siglas = tk.Entry(win)
-        e_maestro = tk.Entry(win)
-        e_nhuecos = ttk.Combobox(win, values=[str(i) for i in range(1, 6)], width=3, state="readonly")
+        tk.Label(frm, text="Nombre del curso:").grid(row=0, column=0, sticky='w')
+        tk.Label(frm, text="Siglas:").grid(row=1, column=0, sticky='w')
+        tk.Label(frm, text="Maestro global:").grid(row=2, column=0, sticky='w')
+        tk.Label(frm, text="N° de huecos por configuración:").grid(row=3, column=0, sticky='w')
+        e_nombre = tk.Entry(frm)
+        e_siglas = tk.Entry(frm)
+        e_maestro = tk.Entry(frm)
+        e_nhuecos = ttk.Combobox(frm, values=[str(i) for i in range(1, 6)], width=3, state="readonly")
         if clase:
             e_nombre.insert(0, clase.nombre)
             e_siglas.insert(0, clase.siglas)
@@ -512,12 +514,12 @@ class SmartSchedulerApp(tk.Tk):
 
         var_maestro_cfg = tk.BooleanVar(value=clase.maestro_por_cfg if clase else False)
         var_nombre_cfg = tk.BooleanVar(value=clase.nombre_por_cfg if clase else False)
-        chk_maestro_cfg = tk.Checkbutton(win, text="¿El maestro varía por configuración?", variable=var_maestro_cfg)
-        chk_nombre_cfg = tk.Checkbutton(win, text="¿El nombre del curso varía por configuración?", variable=var_nombre_cfg)
+        chk_maestro_cfg = tk.Checkbutton(frm, text="¿El maestro varía por configuración?", variable=var_maestro_cfg)
+        chk_nombre_cfg = tk.Checkbutton(frm, text="¿El nombre del curso varía por configuración?", variable=var_nombre_cfg)
         chk_maestro_cfg.grid(row=4, column=0, columnspan=2, sticky='w')
         chk_nombre_cfg.grid(row=5, column=0, columnspan=2, sticky='w')
 
-        encabezado = tk.Frame(win)
+        encabezado = tk.Frame(frm)
         encabezado.grid(row=6, column=0, columnspan=2, sticky='w')
         tk.Label(encabezado, text="Nombre CFG", width=12).pack(side='left')
         encabezado_dia_hueco = []
@@ -547,7 +549,7 @@ class SmartSchedulerApp(tk.Tk):
         nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
 
         campos_cfg = []
-        cfg_frame = tk.Frame(win)
+        cfg_frame = tk.Frame(frm)
         cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
         dias_full = list(self.config_horario.dias)
         huecos_full = list(self.config_horario.huecos)
@@ -632,7 +634,7 @@ class SmartSchedulerApp(tk.Tk):
 
         self.bind("<<ConfigHorarioChanged>>", lambda e: on_config_horario_change())
 
-        btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
+        btn_add = tk.Button(frm, text="+ Añadir Configuración", command=añadir_fila_cfg)
         btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
         if clase:
             for cfg in clase.configuraciones:
@@ -685,9 +687,10 @@ class SmartSchedulerApp(tk.Tk):
             else:
                 self.clases.append(nueva)
             self.refrescar(tree)
-            win.destroy()
+            self.show_clases()
 
-        tk.Button(win, text="Confirmar", command=confirmar).grid(row=9, column=0, columnspan=2)
+        tk.Button(frm, text="Confirmar", command=confirmar).grid(row=9, column=0, columnspan=2)
+        tk.Button(frm, text="Cancelar", command=self.show_clases).grid(row=10, column=0, columnspan=2)
 
     def agregar_clase(self, tree):
         self.clase_form(tree, clase=None)
