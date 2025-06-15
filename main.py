@@ -300,8 +300,8 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario):
         maestro = cfg.maestro if cfg.maestro else None
         if not maestro:
             clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
-            if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
-                maestro = clase_obj.maestro
+            if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestra:
+                maestro = clase_obj.maestra
             else:
                 maestro = "(sin maestro)"
         maestro_str = maestro if maestro else "(sin maestro)"
@@ -856,22 +856,14 @@ class SmartSchedulerApp(tk.Tk):
         tk.Label(inicio_frame, text=":").pack(side='left')
         inicio_min_combo.pack(side='left')
 
-        # Duración de cada hueco (dos dropdowns)
+        # Duración de cada hueco (dos dropdowns, opciones dinámicas)
         tk.Label(frm, text="Duración de cada hueco:").pack(anchor='w')
         duracion_frame = ttk.Frame(frm)
         duracion_frame.pack(anchor='w', pady=2)
-        try:
-            horas_default = int(self.config_horario.duracion.split('h')[0]) if 'h' in self.config_horario.duracion else 1
-        except Exception:
-            horas_default = 1
-        try:
-            minutos_default = int(self.config_horario.duracion.split('h')[1].replace('min','').strip()) if 'h' in self.config_horario.duracion and 'min' in self.config_horario.duracion else 0
-        except Exception:
-            minutos_default = 0
-        horas_var = tk.StringVar(value=str(horas_default))
-        minutos_var = tk.StringVar(value=str(minutos_default))
-        horas_combo = ttk.Combobox(duracion_frame, values=[str(i) for i in range(0, 25)], width=3, state="readonly", textvariable=horas_var)
-        minutos_combo = ttk.Combobox(duracion_frame, values=[str(i) for i in range(0, 60)], width=3, state="readonly", textvariable=minutos_var)
+        horas_var = tk.StringVar()
+        minutos_var = tk.StringVar()
+        horas_combo = ttk.Combobox(duracion_frame, width=3, state="readonly", textvariable=horas_var)
+        minutos_combo = ttk.Combobox(duracion_frame, width=3, state="readonly", textvariable=minutos_var)
         tk.Label(duracion_frame, text="h").pack(side='left')
         horas_combo.pack(side='left')
         tk.Label(duracion_frame, text="m").pack(side='left')
@@ -882,7 +874,41 @@ class SmartSchedulerApp(tk.Tk):
         etiquetas_huecos_frame.pack(fill='x', pady=2)
         etiquetas_huecos_labels = []
 
+        def actualizar_duracion_dropdowns(*_):
+            # Calcula las opciones válidas para horas y minutos según inicio y n_huecos
+            try:
+                h_ini = int(inicio_hora_var.get())
+                m_ini = int(inicio_min_var.get())
+                inicio_min = h_ini * 60 + m_ini
+            except Exception:
+                h_ini, m_ini, inicio_min = 16, 0, 16*60
+            try:
+                n = int(n_huecos_var.get())
+            except Exception:
+                n = 1
+            minutos_totales = 24*60 - inicio_min
+            if n < 1:
+                n = 1
+            max_bloque = minutos_totales // n
+            # Opciones para horas y minutos (0 siempre debe estar)
+            horas_opciones = [str(h) for h in range(0, 25) if h*60 <= max_bloque]
+            if not horas_opciones:
+                horas_opciones = ['0']
+            # Para minutos, depende de la hora seleccionada
+            sel_h = int(horas_var.get() or 0)
+            minutos_opciones = [str(m) for m in range(0, 60) if (sel_h*60 + m) <= max_bloque]
+            if '0' not in minutos_opciones:
+                minutos_opciones.insert(0, '0')
+            # Si la opción actual no es válida, poner la primera válida
+            if horas_var.get() not in horas_opciones:
+                horas_var.set(horas_opciones[0])
+            if minutos_var.get() not in minutos_opciones:
+                minutos_var.set(minutos_opciones[0])
+            horas_combo['values'] = horas_opciones
+            minutos_combo['values'] = minutos_opciones
+
         def actualizar_configuracion(*_):
+            actualizar_duracion_dropdowns()
             # Limpiar etiquetas previas
             for w in etiquetas_huecos_labels:
                 w.destroy()
@@ -907,18 +933,7 @@ class SmartSchedulerApp(tk.Tk):
                 m = int(minutos_var.get())
             except Exception:
                 h, m = 1, 0
-            # Validación: duración máxima
-            try:
-                t_inicio = datetime.datetime.strptime(inicio, "%H:%M")
-                minutos_totales = 24*60 - (t_inicio.hour*60 + t_inicio.minute)
-                max_duracion = minutos_totales // n if n > 0 else 0
-                if h*60 + m > max_duracion:
-                    raise ValueError(f"Duración máxima por hueco: {max_duracion//60}h {max_duracion%60}m")
-                etiquetas = calcular_etiquetas_huecos(huecos, inicio, h, m)
-                error_msg = ""
-            except Exception as ex:
-                etiquetas = {h: "ERROR" for h in huecos}
-                error_msg = f"Duración inválida: {ex}"
+            etiquetas = calcular_etiquetas_huecos(huecos, inicio, h, m)
             etiquetas_dias = {k: v for k, v in DEFAULT_ETIQUETAS_DIAS.items() if v in dias}
             self.config_horario = ConfigHorario(
                 dias=dias,
@@ -933,14 +948,10 @@ class SmartSchedulerApp(tk.Tk):
             ltitle.grid(row=0, column=0, sticky='w')
             etiquetas_huecos_labels.append(ltitle)
             max_por_fila = 6
-            for idx, h in enumerate(huecos):
-                l = tk.Label(etiquetas_huecos_frame, text=f"{h}: {etiquetas[h]}", relief='groove', padx=4)
+            for idx, hq in enumerate(huecos):
+                l = tk.Label(etiquetas_huecos_frame, text=f"{hq}: {etiquetas[hq]}", relief='groove', padx=4)
                 l.grid(row=1 + idx // max_por_fila, column=idx % max_por_fila, sticky='w', padx=2, pady=2)
                 etiquetas_huecos_labels.append(l)
-            if error_msg:
-                lerr = tk.Label(etiquetas_huecos_frame, text=error_msg, fg="red")
-                lerr.grid(row=1 + (len(huecos) // max_por_fila) + 1, column=0, columnspan=max_por_fila, sticky='w', padx=10)
-                etiquetas_huecos_labels.append(lerr)
 
         # Bindings para actualización dinámica
         for _, var in dias_vars:
@@ -950,6 +961,7 @@ class SmartSchedulerApp(tk.Tk):
         inicio_min_combo.bind('<<ComboboxSelected>>', actualizar_configuracion)
         horas_combo.bind('<<ComboboxSelected>>', actualizar_configuracion)
         minutos_combo.bind('<<ComboboxSelected>>', actualizar_configuracion)
+        # Inicialización
         actualizar_configuracion()
 
     # ========== SECCIÓN GENERAR HORARIOS ==========
