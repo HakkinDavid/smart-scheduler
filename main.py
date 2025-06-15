@@ -560,7 +560,9 @@ class SmartSchedulerApp(tk.Tk):
         def añadir_fila_cfg(c=None):
             actualizar_opciones_dias_huecos()
             fila = tk.Frame(cfg_frame)
+            # Nombre CFG primero
             e_nombre_cfg = tk.Entry(fila, width=12)
+            e_nombre_cfg.pack(side='left')
             dia_boxes = []
             hueco_boxes = []
             try:
@@ -581,7 +583,6 @@ class SmartSchedulerApp(tk.Tk):
                 hueco_boxes.append(hueco)
             e_maestro_cfg = tk.Entry(fila, width=14) if var_maestro_cfg.get() else None
             e_nombre_curso_cfg = tk.Entry(fila, width=18) if var_nombre_cfg.get() else None
-            e_nombre_cfg.pack(side='left')
             if e_maestro_cfg:
                 e_maestro_cfg.pack(side='left')
             if e_nombre_curso_cfg:
@@ -739,7 +740,9 @@ class SmartSchedulerApp(tk.Tk):
         def añadir_fila_cfg(c=None):
             actualizar_opciones_dias_huecos()
             fila = tk.Frame(cfg_frame)
+            # Nombre CFG primero
             e_nombre_cfg = tk.Entry(fila, width=12)
+            e_nombre_cfg.pack(side='left')
             dia_boxes = []
             hueco_boxes = []
             try:
@@ -760,7 +763,6 @@ class SmartSchedulerApp(tk.Tk):
                 hueco_boxes.append(hueco)
             e_maestro_cfg = tk.Entry(fila, width=14) if var_maestro_cfg.get() else None
             e_nombre_curso_cfg = tk.Entry(fila, width=18) if var_nombre_cfg.get() else None
-            e_nombre_cfg.pack(side='left')
             if e_maestro_cfg:
                 e_maestro_cfg.pack(side='left')
             if e_nombre_curso_cfg:
@@ -935,7 +937,7 @@ class SmartSchedulerApp(tk.Tk):
                 if horas_opciones:
                     horas_var.set(horas_opciones[-1])
                 if minutos_opciones:
-                    minutos_var.set(minutos_opciones[-1])
+                    minutos_var.set(minutos_opciones[0])
                 actualizar_duracion_dropdowns.initialized = True
 
         def actualizar_configuracion(*_):
