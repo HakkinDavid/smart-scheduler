@@ -486,9 +486,9 @@ class SmartSchedulerApp(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Error al cargar", str(e))
 
-    def agregar_clase(self, tree):
+    def clase_form(self, tree, clase: Optional[Clase] = None):
         win = tk.Toplevel(self)
-        win.title("Nueva Clase")
+        win.title("Editar Clase" if clase else "Nueva Clase")
         # Etiquetas para campos de texto
         tk.Label(win, text="Nombre del curso:").grid(row=0, column=0, sticky='w')
         tk.Label(win, text="Siglas:").grid(row=1, column=0, sticky='w')
@@ -498,27 +498,30 @@ class SmartSchedulerApp(tk.Tk):
         e_siglas = tk.Entry(win)
         e_maestro = tk.Entry(win)
         e_nhuecos = ttk.Combobox(win, values=[str(i) for i in range(1, 6)], width=3, state="readonly")
-        e_nhuecos.set("2")
+        if clase:
+            e_nombre.insert(0, clase.nombre)
+            e_siglas.insert(0, clase.siglas)
+            e_maestro.insert(0, clase.maestro)
+            e_nhuecos.set(str(clase.n_huecos))
+        else:
+            e_nhuecos.set("2")
         e_nombre.grid(row=0, column=1)
         e_siglas.grid(row=1, column=1)
         e_maestro.grid(row=2, column=1)
         e_nhuecos.grid(row=3, column=1)
 
-        var_maestro_cfg = tk.BooleanVar()
-        var_nombre_cfg = tk.BooleanVar()
+        var_maestro_cfg = tk.BooleanVar(value=clase.maestro_por_cfg if clase else False)
+        var_nombre_cfg = tk.BooleanVar(value=clase.nombre_por_cfg if clase else False)
         chk_maestro_cfg = tk.Checkbutton(win, text="¿El maestro varía por configuración?", variable=var_maestro_cfg)
         chk_nombre_cfg = tk.Checkbutton(win, text="¿El nombre del curso varía por configuración?", variable=var_nombre_cfg)
         chk_maestro_cfg.grid(row=4, column=0, columnspan=2, sticky='w')
         chk_nombre_cfg.grid(row=5, column=0, columnspan=2, sticky='w')
 
-        # Encabezados de configuración
         encabezado = tk.Frame(win)
         encabezado.grid(row=6, column=0, columnspan=2, sticky='w')
         tk.Label(encabezado, text="Nombre CFG", width=12).pack(side='left')
-        # --- CAMBIO: Encabezados dinámicos según n_huecos ---
         encabezado_dia_hueco = []
         def actualizar_encabezado():
-            # Elimina encabezados previos de día/hueco si existen
             for w in encabezado_dia_hueco:
                 w.destroy()
             encabezado_dia_hueco.clear()
@@ -542,7 +545,6 @@ class SmartSchedulerApp(tk.Tk):
                 nombre_col.pack_forget()
         maestro_col = tk.Label(encabezado, text="Maestro CFG", width=14)
         nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
-        # --- FIN CAMBIO encabezados dinámicos ---
 
         campos_cfg = []
         cfg_frame = tk.Frame(win)
@@ -602,20 +604,42 @@ class SmartSchedulerApp(tk.Tk):
                 if e_nombre_curso_cfg and c.nombre_curso:
                     e_nombre_curso_cfg.insert(0, c.nombre_curso)
 
+        def on_var_cfg(*_):
+            actualizar_encabezado()
+            for child in cfg_frame.winfo_children():
+                child.destroy()
+            campos_cfg.clear()
+            if clase:
+                for cfg in clase.configuraciones:
+                    añadir_fila_cfg(cfg)
+            else:
+                añadir_fila_cfg()
+
+        var_maestro_cfg.trace_add('write', on_var_cfg)
+        var_nombre_cfg.trace_add('write', on_var_cfg)
+        e_nhuecos.bind('<<ComboboxSelected>>', lambda e: on_var_cfg())
+
         def on_config_horario_change(*_):
             actualizar_opciones_dias_huecos()
             for child in cfg_frame.winfo_children():
                 child.destroy()
             campos_cfg.clear()
-            añadir_fila_cfg()
+            if clase:
+                for cfg in clase.configuraciones:
+                    añadir_fila_cfg(cfg)
+            else:
+                añadir_fila_cfg()
 
-        # Hook para actualizar opciones si cambia la configuración global
         self.bind("<<ConfigHorarioChanged>>", lambda e: on_config_horario_change())
 
         btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
         btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
-        añadir_fila_cfg()
-        actualizar_encabezado()  # Inicializa encabezados correctos
+        if clase:
+            for cfg in clase.configuraciones:
+                añadir_fila_cfg(cfg)
+        else:
+            añadir_fila_cfg()
+        actualizar_encabezado()
 
         def confirmar():
             nombre = e_nombre.get().strip()
@@ -633,6 +657,8 @@ class SmartSchedulerApp(tk.Tk):
                     dia = dia_box.get().strip()
                     dia_key = next((k for k, v in DEFAULT_ETIQUETAS_DIAS.items() if v == dia), dia)
                     hueco = hueco_box.get().strip()
+                    if " " in hueco:
+                        hueco = hueco.split(" ")[0]
                     if dia_key and hueco:
                         huecos.append((dia_key, hueco))
                 if len(huecos) == n_huecos and nombre_cfg:
@@ -644,7 +670,7 @@ class SmartSchedulerApp(tk.Tk):
                         maestro=maestro_cfg,
                         nombre_curso=nombre_curso_cfg
                     ))
-            self.clases.append(Clase(
+            nueva = Clase(
                 nombre=nombre,
                 siglas=siglas,
                 maestro=maestro,
@@ -652,11 +678,19 @@ class SmartSchedulerApp(tk.Tk):
                 maestro_por_cfg=var_maestro_cfg.get(),
                 nombre_por_cfg=var_nombre_cfg.get(),
                 n_huecos=n_huecos
-            ))
+            )
+            if clase:
+                i = self.clases.index(clase)
+                self.clases[i] = nueva
+            else:
+                self.clases.append(nueva)
             self.refrescar(tree)
             win.destroy()
 
         tk.Button(win, text="Confirmar", command=confirmar).grid(row=9, column=0, columnspan=2)
+
+    def agregar_clase(self, tree):
+        self.clase_form(tree, clase=None)
 
     def editar_clase(self, tree):
         sel = tree.selection()
@@ -666,177 +700,7 @@ class SmartSchedulerApp(tk.Tk):
         clase = next((c for c in self.clases if c.nombre == nombre), None)
         if not clase:
             return
-
-        win = tk.Toplevel(self)
-        win.title("Editar Clase")
-        tk.Label(win, text="Nombre del curso:").grid(row=0, column=0, sticky='w')
-        tk.Label(win, text="Siglas:").grid(row=1, column=0, sticky='w')
-        tk.Label(win, text="Maestro global:").grid(row=2, column=0, sticky='w')
-        tk.Label(win, text="N° de huecos por configuración:").grid(row=3, column=0, sticky='w')
-        e_nombre = tk.Entry(win)
-        e_siglas = tk.Entry(win)
-        e_maestro = tk.Entry(win)
-        e_nhuecos = ttk.Combobox(win, values=[str(i) for i in range(1, 6)], width=3, state="readonly")
-        e_nombre.insert(0, clase.nombre)
-        e_siglas.insert(0, clase.siglas)
-        e_maestro.insert(0, clase.maestro)
-        e_nhuecos.set(str(clase.n_huecos))
-        e_nombre.grid(row=0, column=1)
-        e_siglas.grid(row=1, column=1)
-        e_maestro.grid(row=2, column=1)
-        e_nhuecos.grid(row=3, column=1)
-
-        var_maestro_cfg = tk.BooleanVar(value=clase.maestro_por_cfg)
-        var_nombre_cfg = tk.BooleanVar(value=clase.nombre_por_cfg)
-        chk_maestro_cfg = tk.Checkbutton(win, text="¿El maestro varía por configuración?", variable=var_maestro_cfg)
-        chk_nombre_cfg = tk.Checkbutton(win, text="¿El nombre del curso varía por configuración?", variable=var_nombre_cfg)
-        chk_maestro_cfg.grid(row=4, column=0, columnspan=2, sticky='w')
-        chk_nombre_cfg.grid(row=5, column=0, columnspan=2, sticky='w')
-
-        encabezado = tk.Frame(win)
-        encabezado.grid(row=6, column=0, columnspan=2, sticky='w')
-        tk.Label(encabezado, text="Nombre CFG", width=12).pack(side='left')
-        # --- CAMBIO: Encabezados dinámicos según n_huecos ---
-        encabezado_dia_hueco = []
-        def actualizar_encabezado():
-            for w in encabezado_dia_hueco:
-                w.destroy()
-            encabezado_dia_hueco.clear()
-            try:
-                n_huecos = int(e_nhuecos.get())
-            except Exception:
-                n_huecos = 2
-            for i in range(n_huecos):
-                l1 = tk.Label(encabezado, text=f"Día {i+1}", width=10)
-                l2 = tk.Label(encabezado, text=f"Hueco {i+1}", width=8)
-                l1.pack(side='left')
-                l2.pack(side='left')
-                encabezado_dia_hueco.extend([l1, l2])
-            if var_maestro_cfg.get():
-                maestro_col.pack(side='left')
-            else:
-                maestro_col.pack_forget()
-            if var_nombre_cfg.get():
-                nombre_col.pack(side='left')
-            else:
-                nombre_col.pack_forget()
-        maestro_col = tk.Label(encabezado, text="Maestro CFG", width=14)
-        nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
-        # --- FIN CAMBIO encabezados dinámicos ---
-
-        campos_cfg = []
-        cfg_frame = tk.Frame(win)
-        cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
-        dias_full = list(self.config_horario.dias)
-        huecos_full = list(self.config_horario.huecos)
-        etiquetas_huecos = self.config_horario.etiquetas_huecos
-
-        def actualizar_opciones_dias_huecos():
-            nonlocal dias_full, huecos_full, etiquetas_huecos
-            dias_full = list(self.config_horario.dias)
-            huecos_full = list(self.config_horario.huecos)
-            etiquetas_huecos = self.config_horario.etiquetas_huecos
-
-        def añadir_fila_cfg(c=None):
-            actualizar_opciones_dias_huecos()
-            fila = tk.Frame(cfg_frame)
-            # Nombre CFG primero
-            e_nombre_cfg = tk.Entry(fila, width=12)
-            e_nombre_cfg.pack(side='left')
-            dia_boxes = []
-            hueco_boxes = []
-            try:
-                n_huecos = int(e_nhuecos.get())
-            except Exception:
-                n_huecos = 2
-            for i in range(n_huecos):
-                dia = ttk.Combobox(fila, values=dias_full, width=10, state="readonly")
-                hueco = ttk.Combobox(
-                    fila,
-                    values=[f"{h} ({etiquetas_huecos.get(h, h)})" for h in huecos_full],
-                    width=18,
-                    state="readonly"
-                )
-                dia.pack(side='left')
-                hueco.pack(side='left')
-                dia_boxes.append(dia)
-                hueco_boxes.append(hueco)
-            e_maestro_cfg = tk.Entry(fila, width=14) if var_maestro_cfg.get() else None
-            e_nombre_curso_cfg = tk.Entry(fila, width=18) if var_nombre_cfg.get() else None
-            if e_maestro_cfg:
-                e_maestro_cfg.pack(side='left')
-            if e_nombre_curso_cfg:
-                e_nombre_curso_cfg.pack(side='left')
-            btn_del = tk.Button(fila, text="❌", command=lambda: (fila.destroy(), campos_cfg.remove(campo)))
-            btn_del.pack(side='left')
-            fila.pack(anchor='w', pady=2)
-            campo = (e_nombre_cfg, dia_boxes, hueco_boxes, e_maestro_cfg, e_nombre_curso_cfg)
-            campos_cfg.append(campo)
-            if c:
-                e_nombre_cfg.insert(0, c.nombre)
-                for i, (d, h) in enumerate(c.huecos):
-                    dia_boxes[i].set(self.config_horario.etiquetas_dias.get(d, d) if d in self.config_horario.etiquetas_dias else d)
-                    hueco_boxes[i].set(f"{h} ({etiquetas_huecos.get(h, h)})")
-                if e_maestro_cfg and c.maestro:
-                    e_maestro_cfg.insert(0, c.maestro)
-                if e_nombre_curso_cfg and c.nombre_curso:
-                    e_nombre_curso_cfg.insert(0, c.nombre_curso)
-
-        def on_config_horario_change(*_):
-            actualizar_opciones_dias_huecos()
-            for child in cfg_frame.winfo_children():
-                child.destroy()
-            campos_cfg.clear()
-            for cfg in clase.configuraciones:
-                añadir_fila_cfg(cfg)
-
-        # Hook para actualizar opciones si cambia la configuración global
-        self.bind("<<ConfigHorarioChanged>>", lambda e: on_config_horario_change())
-
-        btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
-        btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
-        for cfg in clase.configuraciones:
-            añadir_fila_cfg(cfg)
-        actualizar_encabezado()  # Inicializa encabezados correctos
-
-        def confirmar_edicion():
-            nombre = e_nombre.get().strip()
-            siglas = e_siglas.get().strip() or nombre[:3].upper()
-            maestro = e_maestro.get().strip()
-            n_huecos = int(e_nhuecos.get())
-            configuraciones = []
-            for e_nombre_cfg, dia_boxes, hueco_boxes, e_maestro_cfg, e_nombre_curso_cfg in campos_cfg:
-                nombre_cfg = e_nombre_cfg.get().strip()
-                huecos = []
-                for dia_box, hueco_box in zip(dia_boxes, hueco_boxes):
-                    dia = dia_box.get().strip()
-                    dia_key = next((k for k, v in DEFAULT_ETIQUETAS_DIAS.items() if v == dia), dia)
-                    hueco = hueco_box.get().strip()
-                    if dia_key and hueco:
-                        huecos.append((dia_key, hueco))
-                if len(huecos) == n_huecos and nombre_cfg:
-                    maestro_cfg = e_maestro_cfg.get().strip() if e_maestro_cfg else None
-                    nombre_curso_cfg = e_nombre_curso_cfg.get().strip() if e_nombre_curso_cfg else None
-                    configuraciones.append(ConfiguracionClase(
-                        nombre=nombre_cfg,
-                        huecos=tuple(huecos),
-                        maestro=maestro_cfg,
-                        nombre_curso=nombre_curso_cfg
-                    ))
-            i = self.clases.index(clase)
-            self.clases[i] = Clase(
-                nombre=nombre,
-                siglas=siglas,
-                maestro=maestro,
-                configuraciones=configuraciones,
-                maestro_por_cfg=var_maestro_cfg.get(),
-                nombre_por_cfg=var_nombre_cfg.get(),
-                n_huecos=n_huecos
-            )
-            self.refrescar(tree)
-            win.destroy()
-
-        tk.Button(win, text="Confirmar", command=confirmar_edicion).grid(row=9, column=0, columnspan=2)
+        self.clase_form(tree, clase=clase)
 
     # ========== SECCIÓN CONFIGURACIÓN HORARIO ==========
     def show_config_horario(self):
