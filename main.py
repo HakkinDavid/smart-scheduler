@@ -17,6 +17,66 @@ La aplicación:
 
 import itertools
 from typing import List, Tuple, Dict, NamedTuple, Any, Optional
+import datetime
+
+def generar_nombres_huecos(n):
+    """Genera nombres tipo A, B, ..., Z, AA, AB, ..., AZ, ..., ZZ, etc."""
+    nombres = []
+    for i in range(n):
+        s = ""
+        x = i
+        while True:
+            s = chr(ord('A') + (x % 26)) + s
+            x = x // 26 - 1
+            if x < 0:
+                break
+        nombres.append(s)
+    return nombres
+
+def sumar_minutos(hora_str, minutos):
+    """Suma minutos a una hora tipo '08:00' y retorna 'HH:MM'."""
+    h, m = map(int, hora_str.split(":"))
+    t = datetime.datetime(2000, 1, 1, h, m) + datetime.timedelta(minutes=minutos)
+    return t.strftime("%H:%M")
+
+def parse_duracion(duracion):
+    """
+    Convierte una cadena tipo '1h', '1h 20min', '80m', '90', '90min', '1h20', etc. a minutos.
+    Lanza ValueError si el formato es inválido.
+    """
+    duracion = duracion.strip().lower().replace(' ', '')
+    if not duracion:
+        raise ValueError("Duración vacía")
+    minutos = 0
+    if 'h' in duracion:
+        partes = duracion.split('h')
+        horas = int(partes[0]) if partes[0] else 0
+        minutos += horas * 60
+        resto = partes[1] if len(partes) > 1 else ''
+        if resto:
+            if 'm' in resto:
+                minutos += int(resto.replace('min', '').replace('m', ''))
+            else:
+                minutos += int(resto)
+    elif 'm' in duracion:
+        minutos += int(duracion.replace('min', '').replace('m', ''))
+    else:
+        minutos += int(duracion)
+    if minutos <= 0:
+        raise ValueError("Duración debe ser mayor a cero")
+    return minutos
+
+def calcular_etiquetas_huecos(huecos, inicio, duracion):
+    """Genera etiquetas de tiempo para cada hueco dado el inicio y duración."""
+    etiquetas = {}
+    minutos = 0
+    duracion_min = parse_duracion(duracion)
+    for hq in huecos:
+        ini = sumar_minutos(inicio, minutos)
+        fin = sumar_minutos(inicio, minutos + duracion_min)
+        etiquetas[hq] = f"{ini}–{fin}"
+        minutos += duracion_min
+    return etiquetas
 
 # ================== NUEVAS CONFIGURACIONES DE HORARIO ==================
 class ConfigHorario(NamedTuple):
@@ -30,7 +90,7 @@ class ConfigHorario(NamedTuple):
 # Configuración por defecto
 DEFAULT_DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
 DEFAULT_HUECOS = ['A', 'B', 'C']
-DEFAULT_ETIQUETAS_HUECOS = {'A': '08:00–09:20', 'B': '09:30–10:50', 'C': '11:00–12:20'}
+DEFAULT_ETIQUETAS_HUECOS = {'A': '16:00–18:00', 'B': '18:00–20:00', 'C': '20:00–22:00'}
 DEFAULT_ETIQUETAS_DIAS = {'L': 'Lunes', 'M': 'Martes', 'X': 'Miércoles', 'J': 'Jueves', 'V': 'Viernes'}
 
 config_horario = ConfigHorario(
@@ -38,8 +98,8 @@ config_horario = ConfigHorario(
     huecos=DEFAULT_HUECOS,
     etiquetas_huecos=DEFAULT_ETIQUETAS_HUECOS,
     etiquetas_dias=DEFAULT_ETIQUETAS_DIAS,
-    inicio='08:00',
-    duracion='1h 20min'
+    inicio='16:00',
+    duracion='2h'
 )
 
 # ================== MODELOS DE DATOS EXTENDIDOS ==================
@@ -71,7 +131,6 @@ def generar_globales(clases: List[Clase]) -> List[Dict[str, ConfiguracionClase]]
     sin solapamientos de huecos.
     """
     soluciones = []
-    # backtracking recursivo
     asign = {}
     ocupados = set()
 
@@ -93,15 +152,17 @@ def generar_globales(clases: List[Clase]) -> List[Dict[str, ConfiguracionClase]]
 
 # Evaluación de comodidad
 
-def evaluar(solucion: Dict[str, ConfiguracionClase]) -> Solucion:
+def evaluar(solucion: Dict[str, ConfiguracionClase], config: ConfigHorario = config_horario) -> Solucion:
     """
     Evalúa una solución global y retorna puntuación y análisis detallado.
+    Usa la configuración dinámica de días y huecos.
     """
-    # Mapa día -> set de huecos ocupados
-    dias: Dict[str, set] = {d: set() for d in ['L','M','X','J','V']}
+    dias_cortos = list(config.etiquetas_dias.keys())
+    dias: Dict[str, set] = {d: set() for d in dias_cortos}
     for cfg in solucion.values():
         for dia, hueco in cfg.huecos:
-            dias[dia].add(hueco)
+            if dia in dias:
+                dias[dia].add(hueco)
 
     puntos = 0
     detalle = { 'dias_libres': [], 'intermedios_ok': True, 'dias_unico': [],
@@ -137,14 +198,13 @@ def evaluar(solucion: Dict[str, ConfiguracionClase]) -> Solucion:
     # e) día con salida temprana: A ∧ B ∧ ¬C
     for d, h in dias.items():
         if {'A','B'}.issubset(h) and 'C' not in h:
-            points = 1
             puntos += 1
             detalle['salida_temprano'].append(d)
 
     # f) días de mayor carga juntos (dos días con 2+ clases contiguos)
     dias_carga = [d for d, h in dias.items() if len(h) >= 2]
-    orden = ['L','M','X','J','V']
-    indices = sorted(orden.index(d) for d in dias_carga)
+    orden = dias_cortos
+    indices = sorted(orden.index(d) for d in dias_carga if d in orden)
     for i in range(len(indices)-1):
         if indices[i+1] == indices[i] + 1:
             puntos += 1
@@ -160,19 +220,23 @@ def evaluar(solucion: Dict[str, ConfiguracionClase]) -> Solucion:
     return Solucion(asignacion=solucion, puntuacion=puntos, detalle=detalle)
 
 # Representación matricial (sin visualización gráfica)
-def representar_matriz(solucion: Dict[str, ConfiguracionClase]) -> List[List[str]]:
+def representar_matriz(solucion: Dict[str, ConfiguracionClase], config: ConfigHorario) -> List[List[str]]:
     """
-    Genera una matriz 5x3 con etiquetas de configuración-clase o cadenas vacías.
-    Filas en orden A, B, C; columnas en orden L,M,X,J,V.
+    Genera una matriz NxM con etiquetas de configuración-clase o cadenas vacías.
+    Filas = huecos, columnas = días, ambos según la configuración activa.
     """
-    matriz = [['' for _ in range(5)] for _ in range(3)]
-    dia_idx = {'L':0,'M':1,'X':2,'J':3,'V':4}
-    hueco_idx = {'A':0,'B':1,'C':2}
+    matriz = [['' for _ in config.dias] for _ in config.huecos]
+    # Mapear clave corta de día a índice de columna
+    etiqueta_a_clave = {v: k for k, v in config.etiquetas_dias.items()}
+    dia_idx = {d: i for i, d in enumerate(config.dias)}
+    hueco_idx = {h: i for i, h in enumerate(config.huecos)}
     for cfg in solucion.values():
-        for dia, hueco in cfg.huecos:
-            i = hueco_idx[hueco]
-            j = dia_idx[DEFAULT_ETIQUETAS_DIAS[dia]]
-            matriz[i][j] = cfg.nombre
+        for dia_corto, hueco in cfg.huecos:
+            dia_etiqueta = config.etiquetas_dias.get(dia_corto, dia_corto)
+            if dia_etiqueta in dia_idx and hueco in hueco_idx:
+                i = hueco_idx[hueco]
+                j = dia_idx[dia_etiqueta]
+                matriz[i][j] = cfg.nombre
     return matriz
 
 # ================== VISUALIZACIÓN Y EXPORTACIÓN CON LEYENDA ==================
@@ -180,15 +244,34 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import random
 
-def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario = config_horario):
+def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], config: ConfigHorario):
+    """
+    Genera la matriz y la leyenda usando la configuración personalizada.
+    """
+    matriz = [['' for _ in config.dias] for _ in config.huecos]
+    leyenda = [[{} for _ in config.dias] for _ in config.huecos]
+    # Mapear clave corta de día a etiqueta personalizada
+    dia_idx = {d: i for i, d in enumerate(config.dias)}
+    hueco_idx = {h: i for i, h in enumerate(config.huecos)}
+    for clase, cfg in solucion.items():
+        for dia_corto, hueco in cfg.huecos:
+            dia_etiqueta = config.etiquetas_dias.get(dia_corto, dia_corto)
+            if dia_etiqueta in dia_idx and hueco in hueco_idx:
+                i = hueco_idx[hueco]
+                j = dia_idx[dia_etiqueta]
+                matriz[i][j] = f"{cfg.nombre_curso or clase} @ {cfg.nombre}"
+                leyenda[i][j] = {'clase': clase, 'cfg': cfg.nombre}
+    return matriz, leyenda
+
+def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario):
     matriz, leyenda = representar_matriz_con_leyenda(solucion.asignacion, config)
-    fig, ax = plt.subplots(figsize=(10, 3))
+    fig, ax = plt.subplots(figsize=(2+len(config.dias)*1.5, 2+len(config.huecos)))
     clases = list(solucion.asignacion.keys())
     random.seed(42)
     colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
     colores_asignados = {clase: colores[i % len(colores)] for i, clase in enumerate(clases)}
     dia_labels = config.dias
-    hueco_labels = [config.etiquetas_huecos[h] for h in config.huecos]
+    hueco_labels = [config.etiquetas_huecos.get(h, h) for h in config.huecos]
     def get_color(i, j):
         ley = leyenda[i][j]
         if isinstance(ley, dict) and 'clase' in ley:
@@ -203,61 +286,30 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario = config_hora
         rowLabels=hueco_labels, colLabels=dia_labels, loc='center', cellLoc='center'
     )
     table.scale(1, 2)
+    for key, cell in table.get_celld().items():
+        cell.set_fontsize(14)
     ax.axis('off')
     plt.title(f'Configuración global - Puntuación: {solucion.puntuacion}')
     # Leyenda mejorada
     legend_handles = []
     for clase, color in colores_asignados.items():
         cfg = solucion.asignacion[clase]
-        # Determinar nombre_curso y siglas
         nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
         siglas = clase
-        # Mostrar solo uno si son iguales
-        if nombre_curso == siglas:
-            curso_str = nombre_curso
-        else:
-            curso_str = f"{nombre_curso} ({siglas})"
-        # Maestro: si no hay maestro por configuración, usar el global
+        curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
         maestro = cfg.maestro if cfg.maestro else None
         if not maestro:
-            # Buscar el objeto Clase correspondiente
             clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
             if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
                 maestro = clase_obj.maestro
             else:
-                # fallback: buscar en la lista de clases global
-                from inspect import currentframe
-                frame = currentframe()
-                while frame:
-                    if 'self' in frame.f_locals and hasattr(frame.f_locals['self'], 'clases'):
-                        clases_list = frame.f_locals['self'].clases
-                        clase_data = next((c for c in clases_list if c.nombre == clase), None)
-                        if clase_data:
-                            maestro = clase_data.maestro
-                        break
-                    frame = frame.f_back
+                maestro = "(sin maestro)"
         maestro_str = maestro if maestro else "(sin maestro)"
         label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
         legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
     plt.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.tight_layout()
     plt.show()
-
-def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], config: ConfigHorario):
-    matriz = [['' for _ in config.dias] for _ in config.huecos]
-    leyenda = [[{} for _ in config.dias] for _ in config.huecos]
-    dia_idx = {d: i for i, d in enumerate(config.dias)}
-    hueco_idx = {h: i for i, h in enumerate(config.huecos)}
-    for clase, cfg in solucion.items():
-        siglas = clase  # Asumimos que el nombre de la clase es la sigla
-        if hasattr(cfg, 'nombre_curso') and cfg.nombre_curso:
-            siglas = cfg.nombre_curso
-        for dia, hueco in cfg.huecos:
-            i = hueco_idx[hueco]
-            j = dia_idx[DEFAULT_ETIQUETAS_DIAS[dia]]
-            matriz[i][j] = f"{siglas} @ {cfg.nombre}"
-            leyenda[i][j] = {'clase': clase, 'cfg': cfg.nombre}
-    return matriz, leyenda
 
 # === Funciones para guardar y cargar datos en JSON ===
 import json
@@ -350,6 +402,7 @@ class SmartSchedulerApp(tk.Tk):
         self.clases: List[Clase] = []
         self.config_horario = config_horario
         self.soluciones: List[Solucion] = []
+        self.n_huecos = len(self.config_horario.huecos)
         # Secciones
         self.frames = {}
         self.init_ui()
@@ -462,25 +515,23 @@ class SmartSchedulerApp(tk.Tk):
         encabezado = tk.Frame(win)
         encabezado.grid(row=6, column=0, columnspan=2, sticky='w')
         tk.Label(encabezado, text="Nombre CFG", width=12).pack(side='left')
-        for i in range(1, 6):
-            tk.Label(encabezado, text=f"Día {i}", width=10).pack(side='left')
-            tk.Label(encabezado, text=f"Hueco {i}", width=8).pack(side='left')
-        maestro_col = tk.Label(encabezado, text="Maestro CFG", width=14)
-        nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
-        maestro_col.pack(side='left')
-        nombre_col.pack(side='left')
-        maestro_col.pack_forget()
-        nombre_col.pack_forget()
-
-        campos_cfg = []
-
-        cfg_frame = tk.Frame(win)
-        cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
-
-        dias_full = list(DEFAULT_ETIQUETAS_DIAS.values())
-        huecos_full = list(DEFAULT_ETIQUETAS_HUECOS.keys())
-
+        # --- CAMBIO: Encabezados dinámicos según n_huecos ---
+        encabezado_dia_hueco = []
         def actualizar_encabezado():
+            # Elimina encabezados previos de día/hueco si existen
+            for w in encabezado_dia_hueco:
+                w.destroy()
+            encabezado_dia_hueco.clear()
+            try:
+                n_huecos = int(e_nhuecos.get())
+            except Exception:
+                n_huecos = 2
+            for i in range(n_huecos):
+                l1 = tk.Label(encabezado, text=f"Día {i+1}", width=10)
+                l2 = tk.Label(encabezado, text=f"Hueco {i+1}", width=8)
+                l1.pack(side='left')
+                l2.pack(side='left')
+                encabezado_dia_hueco.extend([l1, l2])
             if var_maestro_cfg.get():
                 maestro_col.pack(side='left')
             else:
@@ -489,6 +540,15 @@ class SmartSchedulerApp(tk.Tk):
                 nombre_col.pack(side='left')
             else:
                 nombre_col.pack_forget()
+        maestro_col = tk.Label(encabezado, text="Maestro CFG", width=14)
+        nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
+        # --- FIN CAMBIO encabezados dinámicos ---
+
+        campos_cfg = []
+        cfg_frame = tk.Frame(win)
+        cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
+        dias_full = list(DEFAULT_ETIQUETAS_DIAS.values())
+        huecos_full = list(DEFAULT_ETIQUETAS_HUECOS.keys())
 
         def añadir_fila_cfg(c=None):
             fila = tk.Frame(cfg_frame)
@@ -542,6 +602,7 @@ class SmartSchedulerApp(tk.Tk):
         btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
         btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
         añadir_fila_cfg()
+        actualizar_encabezado()  # Inicializa encabezados correctos
 
         def confirmar():
             nombre = e_nombre.get().strip()
@@ -622,25 +683,22 @@ class SmartSchedulerApp(tk.Tk):
         encabezado = tk.Frame(win)
         encabezado.grid(row=6, column=0, columnspan=2, sticky='w')
         tk.Label(encabezado, text="Nombre CFG", width=12).pack(side='left')
-        for i in range(1, 6):
-            tk.Label(encabezado, text=f"Día {i}", width=10).pack(side='left')
-            tk.Label(encabezado, text=f"Hueco {i}", width=8).pack(side='left')
-        maestro_col = tk.Label(encabezado, text="Maestro CFG", width=14)
-        nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
-        maestro_col.pack(side='left')
-        nombre_col.pack(side='left')
-        maestro_col.pack_forget()
-        nombre_col.pack_forget()
-
-        campos_cfg = []
-
-        cfg_frame = tk.Frame(win)
-        cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
-
-        dias_full = list(DEFAULT_ETIQUETAS_DIAS.values())
-        huecos_full = list(DEFAULT_ETIQUETAS_HUECOS.keys())
-
+        # --- CAMBIO: Encabezados dinámicos según n_huecos ---
+        encabezado_dia_hueco = []
         def actualizar_encabezado():
+            for w in encabezado_dia_hueco:
+                w.destroy()
+            encabezado_dia_hueco.clear()
+            try:
+                n_huecos = int(e_nhuecos.get())
+            except Exception:
+                n_huecos = 2
+            for i in range(n_huecos):
+                l1 = tk.Label(encabezado, text=f"Día {i+1}", width=10)
+                l2 = tk.Label(encabezado, text=f"Hueco {i+1}", width=8)
+                l1.pack(side='left')
+                l2.pack(side='left')
+                encabezado_dia_hueco.extend([l1, l2])
             if var_maestro_cfg.get():
                 maestro_col.pack(side='left')
             else:
@@ -649,13 +707,25 @@ class SmartSchedulerApp(tk.Tk):
                 nombre_col.pack(side='left')
             else:
                 nombre_col.pack_forget()
+        maestro_col = tk.Label(encabezado, text="Maestro CFG", width=14)
+        nombre_col = tk.Label(encabezado, text="Nombre Curso CFG", width=18)
+        # --- FIN CAMBIO encabezados dinámicos ---
+
+        campos_cfg = []
+        cfg_frame = tk.Frame(win)
+        cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
+        dias_full = list(DEFAULT_ETIQUETAS_DIAS.values())
+        huecos_full = list(DEFAULT_ETIQUETAS_HUECOS.keys())
 
         def añadir_fila_cfg(c=None):
             fila = tk.Frame(cfg_frame)
             e_nombre_cfg = tk.Entry(fila, width=12)
             dia_boxes = []
             hueco_boxes = []
-            n_huecos = int(e_nhuecos.get())
+            try:
+                n_huecos = int(e_nhuecos.get())
+            except Exception:
+                n_huecos = 2
             for i in range(n_huecos):
                 dia = ttk.Combobox(fila, values=dias_full, width=10, state="readonly")
                 hueco = ttk.Combobox(fila, values=huecos_full, width=8, state="readonly")
@@ -701,6 +771,7 @@ class SmartSchedulerApp(tk.Tk):
         btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
         for cfg in clase.configuraciones:
             añadir_fila_cfg(cfg)
+        actualizar_encabezado()  # Inicializa encabezados correctos
 
         def confirmar_edicion():
             nombre = e_nombre.get().strip()
@@ -748,17 +819,15 @@ class SmartSchedulerApp(tk.Tk):
         frm.pack(fill='both', expand=True, padx=10, pady=10)
         ttk.Label(frm, text="Configuración Visual del Horario", font=("Helvetica", 16)).pack(anchor='w')
 
-        # Opciones predefinidas
         opciones_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-        opciones_huecos = ['A', 'B', 'C', 'D', 'E']
+        opciones_n_huecos = [str(i) for i in range(1, 27)]
         opciones_horas = [
             '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
             '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
             '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00'
         ]
-        opciones_duracion = ['1h', '1h 15min', '1h 20min', '1h 30min', '2h']
 
-        # Días activos
+        # Días activos (checkboxes)
         tk.Label(frm, text="Días activos:").pack(anchor='w')
         dias_vars = []
         dias_frame = ttk.Frame(frm)
@@ -769,54 +838,11 @@ class SmartSchedulerApp(tk.Tk):
             chk.pack(side='left')
             dias_vars.append((d, var))
 
-        # Huecos activos
-        tk.Label(frm, text="Huecos:").pack(anchor='w')
-        huecos_vars = []
-        huecos_frame = ttk.Frame(frm)
-        huecos_frame.pack(anchor='w', pady=2)
-        for h in opciones_huecos:
-            var = tk.BooleanVar(value=h in self.config_horario.huecos)
-            chk = tk.Checkbutton(huecos_frame, text=h, variable=var)
-            chk.pack(side='left')
-            huecos_vars.append((h, var))
-
-        # Etiquetas de tiempo para cada hueco
-        tk.Label(frm, text="Etiquetas de tiempo (inicio-fin) para cada hueco:").pack(anchor='w')
-        etiquetas_huecos_frame = ttk.Frame(frm)
-        etiquetas_huecos_frame.pack(anchor='w', pady=2)
-        hueco_etiquetas = {}
-        for h in opciones_huecos:
-            if h in self.config_horario.huecos:
-                inicio = ttk.Combobox(etiquetas_huecos_frame, values=opciones_horas, width=6, state="readonly")
-                fin = ttk.Combobox(etiquetas_huecos_frame, values=opciones_horas, width=6, state="readonly")
-                # Prellenar si existe
-                etiqueta = self.config_horario.etiquetas_huecos.get(h, "")
-                if etiqueta and "–" in etiqueta:
-                    ini, fi = etiqueta.split("–")
-                    inicio.set(ini.strip())
-                    fin.set(fi.strip())
-                else:
-                    inicio.set(opciones_horas[0])
-                    fin.set(opciones_horas[1])
-                tk.Label(etiquetas_huecos_frame, text=f"{h}:").pack(side='left')
-                inicio.pack(side='left')
-                tk.Label(etiquetas_huecos_frame, text="–").pack(side='left')
-                fin.pack(side='left')
-                hueco_etiquetas[h] = (inicio, fin)
-
-        # Etiquetas de días (asociación clave corta -> nombre)
-        tk.Label(frm, text="Etiquetas de días:").pack(anchor='w')
-        etiquetas_dias_frame = ttk.Frame(frm)
-        etiquetas_dias_frame.pack(anchor='w', pady=2)
-        dia_keys = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
-        dia_labels = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-        dia_etiquetas = {}
-        for k, label in zip(dia_keys, dia_labels):
-            cb = ttk.Combobox(etiquetas_dias_frame, values=opciones_dias, width=10, state="readonly")
-            cb.set(self.config_horario.etiquetas_dias.get(k, label))
-            tk.Label(etiquetas_dias_frame, text=f"{k}:").pack(side='left')
-            cb.pack(side='left')
-            dia_etiquetas[k] = cb
+        # Número de huecos
+        tk.Label(frm, text="Cantidad de huecos por día:").pack(anchor='w')
+        n_huecos_var = tk.StringVar(value=str(len(self.config_horario.huecos)))
+        n_huecos_combo = ttk.Combobox(frm, values=opciones_n_huecos, width=4, state="readonly", textvariable=n_huecos_var)
+        n_huecos_combo.pack(anchor='w', pady=2)
 
         # Hora de inicio del primer hueco
         tk.Label(frm, text="Hora de inicio del primer hueco:").pack(anchor='w')
@@ -824,39 +850,71 @@ class SmartSchedulerApp(tk.Tk):
         e_inicio.set(self.config_horario.inicio)
         e_inicio.pack(fill='x', pady=2)
 
-        # Duración de cada hueco
-        tk.Label(frm, text="Duración de cada hueco:").pack(anchor='w')
-        e_duracion = ttk.Combobox(frm, values=opciones_duracion, width=12, state="readonly")
-        e_duracion.set(self.config_horario.duracion)
+        # Duración de cada hueco (campo libre)
+        tk.Label(frm, text="Duración de cada hueco (ej: 1h 20min, 80m, 1h, 90):").pack(anchor='w')
+        e_duracion = tk.Entry(frm, width=12)
+        e_duracion.insert(0, self.config_horario.duracion)
         e_duracion.pack(fill='x', pady=2)
 
-        def guardar_config():
+        etiquetas_huecos_frame = ttk.Frame(frm)
+        etiquetas_huecos_frame.pack(anchor='w', pady=2)
+        etiquetas_huecos_labels = []
+
+        def actualizar_configuracion(*_):
+            # Actualiza self.config_horario y la UI de etiquetas
+            for w in etiquetas_huecos_labels:
+                w.destroy()
+            etiquetas_huecos_labels.clear()
+            # Quitar duplicados de etiqueta de sección
+            for w in etiquetas_huecos_frame.winfo_children():
+                w.destroy()
+            # Días seleccionados
             dias = [d for d, var in dias_vars if var.get()]
-            huecos = [h for h, var in huecos_vars if var.get()]
-            etiquetas_huecos = {}
-            for h in huecos:
-                if h in hueco_etiquetas:
-                    ini = hueco_etiquetas[h][0].get()
-                    fin = hueco_etiquetas[h][1].get()
-                    etiquetas_huecos[h] = f"{ini}–{fin}"
-            etiquetas_dias = {}
-            for k in dia_keys:
-                val = dia_etiquetas[k].get()
-                if val:
-                    etiquetas_dias[k] = val
+            try:
+                n = int(n_huecos_var.get())
+            except Exception:
+                n = 1
+            huecos = generar_nombres_huecos(n)
             inicio = e_inicio.get()
             duracion = e_duracion.get()
+            # Validación de duración
+            try:
+                etiquetas = calcular_etiquetas_huecos(huecos, inicio, duracion)
+                error_msg = ""
+            except Exception as ex:
+                etiquetas = {h: "ERROR" for h in huecos}
+                error_msg = f"Duración inválida: {ex}"
+            # Etiquetas de días: solo claves cortas estándar
+            etiquetas_dias = {k: v for k, v in DEFAULT_ETIQUETAS_DIAS.items() if v in dias}
+            # Actualiza config global
             self.config_horario = ConfigHorario(
                 dias=dias,
                 huecos=huecos,
-                etiquetas_huecos=etiquetas_huecos,
+                etiquetas_huecos=etiquetas,
                 etiquetas_dias=etiquetas_dias,
                 inicio=inicio,
                 duracion=duracion
             )
-            messagebox.showinfo("Guardado", "Configuración guardada exitosamente.")
+            # Etiquetas de tiempo para cada hueco
+            ltitle = tk.Label(etiquetas_huecos_frame, text="Etiquetas de tiempo para cada hueco:")
+            ltitle.pack(side='left')
+            etiquetas_huecos_labels.append(ltitle)
+            for h in huecos:
+                l = tk.Label(etiquetas_huecos_frame, text=f"{h}: {etiquetas[h]}", relief='groove', padx=4)
+                l.pack(side='left', padx=2)
+                etiquetas_huecos_labels.append(l)
+            if error_msg:
+                lerr = tk.Label(etiquetas_huecos_frame, text=error_msg, fg="red")
+                lerr.pack(side='left', padx=10)
+                etiquetas_huecos_labels.append(lerr)
 
-        ttk.Button(frm, text="Guardar Configuración", command=guardar_config).pack(pady=10)
+        # Bindings para actualización dinámica
+        for _, var in dias_vars:
+            var.trace_add('write', actualizar_configuracion)
+        n_huecos_combo.bind('<<ComboboxSelected>>', actualizar_configuracion)
+        e_inicio.bind('<<ComboboxSelected>>', actualizar_configuracion)
+        e_duracion.bind('<KeyRelease>', actualizar_configuracion)
+        actualizar_configuracion()
 
     # ========== SECCIÓN GENERAR HORARIOS ==========
     def show_generar(self):
@@ -869,7 +927,7 @@ class SmartSchedulerApp(tk.Tk):
         self.resumen_soluciones(frm)
 
     def generar_soluciones(self):
-        self.soluciones = [evaluar(sol) for sol in generar_globales(self.clases)]
+        self.soluciones = [evaluar(sol, self.config_horario) for sol in generar_globales(self.clases)]
         self.soluciones.sort(key=lambda x: x.puntuacion, reverse=True)
         messagebox.showinfo("Generación", f"Se generaron {len(self.soluciones)} soluciones.")
 
@@ -951,29 +1009,52 @@ class SmartSchedulerApp(tk.Tk):
 
     def exportar_solucion(self):
         solucion = self.soluciones[self.idx_solucion]
-        fig, ax = plt.subplots(figsize=(10, 3))
-        matriz = representar_matriz(solucion.asignacion)
+        matriz, leyenda = representar_matriz_con_leyenda(solucion.asignacion, self.config_horario)
+        fig, ax = plt.subplots(figsize=(2+len(self.config_horario.dias)*1.5, 2+len(self.config_horario.huecos)))
         clases_ = list(solucion.asignacion.keys())
         random.seed(42)
         colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
         colores_asignados = {clase: colores[i % len(colores)] for i, clase in enumerate(clases_)}
         dia_labels = self.config_horario.dias
-        hueco_labels = [self.config_horario.etiquetas_huecos[h] for h in self.config_horario.huecos]
-        table_data = [['' for _ in range(len(dia_labels))] for _ in range(len(hueco_labels))]
-        cell_colors = [['white' for _ in range(len(dia_labels))] for _ in range(len(hueco_labels))]
-        for clase, cfg in solucion.asignacion.items():
-            color = colores_asignados[clase]
-            for dia, hueco in cfg.huecos:
-                i = {'A':0, 'B':1, 'C':2}[hueco]
-                j = {'L':0, 'M':1, 'X':2, 'J':3, 'V':4}[dia]
-                table_data[i][j] = cfg.nombre
-                cell_colors[i][j] = color
-        table = ax.table(cellText=table_data, cellColours=cell_colors,
-                         rowLabels=hueco_labels, colLabels=dia_labels,
-                         loc='center', cellLoc='center')
+        hueco_labels = [self.config_horario.etiquetas_huecos.get(h, h) for h in self.config_horario.huecos]
+        def get_color(i, j):
+            ley = leyenda[i][j]
+            if isinstance(ley, dict) and 'clase' in ley:
+                return colores_asignados.get(ley['clase'], 'white')
+            return 'white'
+        table = ax.table(
+            cellText=matriz,
+            cellColours=[
+                [get_color(i, j) for j in range(len(self.config_horario.dias))]
+                for i in range(len(self.config_horario.huecos))
+            ],
+            rowLabels=hueco_labels, colLabels=dia_labels,
+            loc='center', cellLoc='center'
+        )
         table.scale(1, 2)
+        for key, cell in table.get_celld().items():
+            cell.set_fontsize(18)
         ax.axis('off')
         plt.title(f'Solución {self.idx_solucion+1} - Puntuación: {solucion.puntuacion}')
+        # Leyenda igual que en mostrar_matriz_color
+        legend_handles = []
+        for clase, color in colores_asignados.items():
+            cfg = solucion.asignacion[clase]
+            nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
+            siglas = clase
+            curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
+            maestro = cfg.maestro if cfg.maestro else None
+            if not maestro:
+                clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
+                if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
+                    maestro = clase_obj.maestro
+                else:
+                    maestro = "(sin maestro)"
+            maestro_str = maestro if maestro else "(sin maestro)"
+            label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
+            legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
+        plt.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+        plt.tight_layout()
         path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG", "*.png")])
         if path:
             fig.savefig(path)
@@ -989,29 +1070,51 @@ class SmartSchedulerApp(tk.Tk):
         if not carpeta:
             return
         for i, sol in enumerate(self.soluciones, 1):
-            fig, ax = plt.subplots(figsize=(10, 3))
-            matriz = representar_matriz(sol.asignacion)
+            matriz, leyenda = representar_matriz_con_leyenda(sol.asignacion, self.config_horario)
+            fig, ax = plt.subplots(figsize=(2+len(self.config_horario.dias)*1.5, 2+len(self.config_horario.huecos)))
             clases_ = list(sol.asignacion.keys())
             random.seed(42)
             colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
             colores_asignados = {clase: colores[j % len(colores)] for j, clase in enumerate(clases_)}
             dia_labels = self.config_horario.dias
-            hueco_labels = [self.config_horario.etiquetas_huecos[h] for h in self.config_horario.huecos]
-            table_data = [['' for _ in range(len(dia_labels))] for _ in range(len(hueco_labels))]
-            cell_colors = [['white' for _ in range(len(dia_labels))] for _ in range(len(hueco_labels))]
-            for clase, cfg in sol.asignacion.items():
-                color = colores_asignados[clase]
-                for dia, hueco in cfg.huecos:
-                    i = {'A':0, 'B':1, 'C':2}[hueco]
-                    j = {'L':0, 'M':1, 'X':2, 'J':3, 'V':4}[dia]
-                    table_data[i][j] = cfg.nombre
-                    cell_colors[i][j] = color
-            table = ax.table(cellText=table_data, cellColours=cell_colors,
-                             rowLabels=hueco_labels, colLabels=dia_labels,
-                             loc='center', cellLoc='center')
+            hueco_labels = [self.config_horario.etiquetas_huecos.get(h, h) for h in self.config_horario.huecos]
+            def get_color(ii, jj):
+                ley = leyenda[ii][jj]
+                if isinstance(ley, dict) and 'clase' in ley:
+                    return colores_asignados.get(ley['clase'], 'white')
+                return 'white'
+            table = ax.table(
+                cellText=matriz,
+                cellColours=[
+                    [get_color(ii, jj) for jj in range(len(self.config_horario.dias))]
+                    for ii in range(len(self.config_horario.huecos))
+                ],
+                rowLabels=hueco_labels, colLabels=dia_labels,
+                loc='center', cellLoc='center'
+            )
             table.scale(1, 2)
+            for key, cell in table.get_celld().items():
+                cell.set_fontsize(18)
             ax.axis('off')
             plt.title(f'Solución {i} - Puntuación: {sol.puntuacion}')
+            legend_handles = []
+            for clase, color in colores_asignados.items():
+                cfg = sol.asignacion[clase]
+                nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
+                siglas = clase
+                curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
+                maestro = cfg.maestro if cfg.maestro else None
+                if not maestro:
+                    clase_obj = next((c for c in sol.asignacion.values() if c.nombre == cfg.nombre), None)
+                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
+                        maestro = clase_obj.maestra
+                    else:
+                        maestro = "(sin maestro)"
+                maestro_str = maestro if maestro else "(sin maestro)"
+                label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
+                legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
+            plt.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+            plt.tight_layout()
             nombre_base = f"solucion_{i}_p{sol.puntuacion}"
             path_img = f"{carpeta}/{nombre_base}.png"
             path_txt = f"{carpeta}/{nombre_base}.txt"
