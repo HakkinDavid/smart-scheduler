@@ -547,10 +547,18 @@ class SmartSchedulerApp(tk.Tk):
         campos_cfg = []
         cfg_frame = tk.Frame(win)
         cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
-        dias_full = list(DEFAULT_ETIQUETAS_DIAS.values())
-        huecos_full = list(DEFAULT_ETIQUETAS_HUECOS.keys())
+        dias_full = list(self.config_horario.dias)
+        huecos_full = list(self.config_horario.huecos)
+        etiquetas_huecos = self.config_horario.etiquetas_huecos
+
+        def actualizar_opciones_dias_huecos():
+            nonlocal dias_full, huecos_full, etiquetas_huecos
+            dias_full = list(self.config_horario.dias)
+            huecos_full = list(self.config_horario.huecos)
+            etiquetas_huecos = self.config_horario.etiquetas_huecos
 
         def añadir_fila_cfg(c=None):
+            actualizar_opciones_dias_huecos()
             fila = tk.Frame(cfg_frame)
             e_nombre_cfg = tk.Entry(fila, width=12)
             dia_boxes = []
@@ -561,7 +569,12 @@ class SmartSchedulerApp(tk.Tk):
                 n_huecos = 2
             for i in range(n_huecos):
                 dia = ttk.Combobox(fila, values=dias_full, width=10, state="readonly")
-                hueco = ttk.Combobox(fila, values=huecos_full, width=8, state="readonly")
+                hueco = ttk.Combobox(
+                    fila,
+                    values=[f"{h} ({etiquetas_huecos.get(h, h)})" for h in huecos_full],
+                    width=18,
+                    state="readonly"
+                )
                 dia.pack(side='left')
                 hueco.pack(side='left')
                 dia_boxes.append(dia)
@@ -581,23 +594,22 @@ class SmartSchedulerApp(tk.Tk):
             if c:
                 e_nombre_cfg.insert(0, c.nombre)
                 for i, (d, h) in enumerate(c.huecos):
-                    dia_boxes[i].set(DEFAULT_ETIQUETAS_DIAS.get(d, d))
-                    hueco_boxes[i].set(h)
+                    dia_boxes[i].set(self.config_horario.etiquetas_dias.get(d, d) if d in self.config_horario.etiquetas_dias else d)
+                    hueco_boxes[i].set(f"{h} ({etiquetas_huecos.get(h, h)})")
                 if e_maestro_cfg and c.maestro:
                     e_maestro_cfg.insert(0, c.maestro)
                 if e_nombre_curso_cfg and c.nombre_curso:
                     e_nombre_curso_cfg.insert(0, c.nombre_curso)
 
-        def on_var_cfg(*_):
-            actualizar_encabezado()
+        def on_config_horario_change(*_):
+            actualizar_opciones_dias_huecos()
             for child in cfg_frame.winfo_children():
                 child.destroy()
             campos_cfg.clear()
             añadir_fila_cfg()
 
-        var_maestro_cfg.trace_add('write', on_var_cfg)
-        var_nombre_cfg.trace_add('write', on_var_cfg)
-        e_nhuecos.bind('<<ComboboxSelected>>', lambda e: on_var_cfg())
+        # Hook para actualizar opciones si cambia la configuración global
+        self.bind("<<ConfigHorarioChanged>>", lambda e: on_config_horario_change())
 
         btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
         btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
@@ -714,10 +726,18 @@ class SmartSchedulerApp(tk.Tk):
         campos_cfg = []
         cfg_frame = tk.Frame(win)
         cfg_frame.grid(row=7, column=0, columnspan=2, sticky='w')
-        dias_full = list(DEFAULT_ETIQUETAS_DIAS.values())
-        huecos_full = list(DEFAULT_ETIQUETAS_HUECOS.keys())
+        dias_full = list(self.config_horario.dias)
+        huecos_full = list(self.config_horario.huecos)
+        etiquetas_huecos = self.config_horario.etiquetas_huecos
+
+        def actualizar_opciones_dias_huecos():
+            nonlocal dias_full, huecos_full, etiquetas_huecos
+            dias_full = list(self.config_horario.dias)
+            huecos_full = list(self.config_horario.huecos)
+            etiquetas_huecos = self.config_horario.etiquetas_huecos
 
         def añadir_fila_cfg(c=None):
+            actualizar_opciones_dias_huecos()
             fila = tk.Frame(cfg_frame)
             e_nombre_cfg = tk.Entry(fila, width=12)
             dia_boxes = []
@@ -728,7 +748,12 @@ class SmartSchedulerApp(tk.Tk):
                 n_huecos = 2
             for i in range(n_huecos):
                 dia = ttk.Combobox(fila, values=dias_full, width=10, state="readonly")
-                hueco = ttk.Combobox(fila, values=huecos_full, width=8, state="readonly")
+                hueco = ttk.Combobox(
+                    fila,
+                    values=[f"{h} ({etiquetas_huecos.get(h, h)})" for h in huecos_full],
+                    width=18,
+                    state="readonly"
+                )
                 dia.pack(side='left')
                 hueco.pack(side='left')
                 dia_boxes.append(dia)
@@ -748,24 +773,23 @@ class SmartSchedulerApp(tk.Tk):
             if c:
                 e_nombre_cfg.insert(0, c.nombre)
                 for i, (d, h) in enumerate(c.huecos):
-                    dia_boxes[i].set(DEFAULT_ETIQUETAS_DIAS.get(d, d))
-                    hueco_boxes[i].set(h)
+                    dia_boxes[i].set(self.config_horario.etiquetas_dias.get(d, d) if d in self.config_horario.etiquetas_dias else d)
+                    hueco_boxes[i].set(f"{h} ({etiquetas_huecos.get(h, h)})")
                 if e_maestro_cfg and c.maestro:
                     e_maestro_cfg.insert(0, c.maestro)
                 if e_nombre_curso_cfg and c.nombre_curso:
                     e_nombre_curso_cfg.insert(0, c.nombre_curso)
 
-        def on_var_cfg(*_):
-            actualizar_encabezado()
+        def on_config_horario_change(*_):
+            actualizar_opciones_dias_huecos()
             for child in cfg_frame.winfo_children():
                 child.destroy()
             campos_cfg.clear()
             for cfg in clase.configuraciones:
                 añadir_fila_cfg(cfg)
 
-        var_maestro_cfg.trace_add('write', on_var_cfg)
-        var_nombre_cfg.trace_add('write', on_var_cfg)
-        e_nhuecos.bind('<<ComboboxSelected>>', lambda e: on_var_cfg())
+        # Hook para actualizar opciones si cambia la configuración global
+        self.bind("<<ConfigHorarioChanged>>", lambda e: on_config_horario_change())
 
         btn_add = tk.Button(win, text="+ Añadir Configuración", command=añadir_fila_cfg)
         btn_add.grid(row=8, column=0, columnspan=2, sticky='w')
@@ -906,6 +930,13 @@ class SmartSchedulerApp(tk.Tk):
                 minutos_var.set(minutos_opciones[0])
             horas_combo['values'] = horas_opciones
             minutos_combo['values'] = minutos_opciones
+            # Por defecto, al iniciar, la duración de un bloque debe ser el máximo permitido
+            if not hasattr(actualizar_duracion_dropdowns, "initialized"):
+                if horas_opciones:
+                    horas_var.set(horas_opciones[-1])
+                if minutos_opciones:
+                    minutos_var.set(minutos_opciones[-1])
+                actualizar_duracion_dropdowns.initialized = True
 
         def actualizar_configuracion(*_):
             actualizar_duracion_dropdowns()
