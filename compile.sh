@@ -1,0 +1,1 @@
+pyinstaller --windowed --onedir main.py --icon=smart-scheduler.icns --name="Smart Scheduler" --add-binary smart-scheduler.png:.
