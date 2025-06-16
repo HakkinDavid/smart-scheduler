@@ -16,6 +16,7 @@ La aplicación:
 # ============================================================================================
 
 import itertools
+import sys
 from typing import List, Tuple, Dict, NamedTuple, Any, Optional
 import datetime
 
@@ -446,6 +447,7 @@ class SmartSchedulerApp(tk.Tk):
         self.style.map('Treeview.Heading', background=[('active', '#305080')])
         self.style.configure('TCheckbutton', background="#f5f6fa", font=("Segoe UI", 11))
         self.style.configure('TCombobox', fieldbackground="#fff", background="#fff", font=("Segoe UI", 11))
+        self.protocol("WM_DELETE_WINDOW", self._on_close)  # Maneja cierre seguro
         # Estado global
         self.clases: List[Clase] = []
         self.config_horario = config_horario
@@ -1215,6 +1217,23 @@ class SmartSchedulerApp(tk.Tk):
                 for k, v in sol.detalle.items():
                     f.write(f"{k}: {v}\n")
         messagebox.showinfo("Exportado", f"Se guardaron {len(self.soluciones)} soluciones en {carpeta}")
+
+    def _on_close(self):
+        # Cierra correctamente todos los canvas de matplotlib y termina el proceso
+        try:
+            import matplotlib._pylab_helpers
+            mgrs = list(matplotlib._pylab_helpers.Gcf.get_all_fig_managers())
+            for mgr in mgrs:
+                try:
+                    mgr.canvas.figure.clf()
+                    mgr.canvas.get_tk_widget().destroy()
+                except Exception:
+                    pass
+            matplotlib._pylab_helpers.Gcf.figs.clear()
+        except Exception:
+            pass
+        self.destroy()
+        sys.exit(0)
 
 if __name__ == '__main__':
     app = SmartSchedulerApp()
