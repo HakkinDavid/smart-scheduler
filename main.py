@@ -426,8 +426,26 @@ class SmartSchedulerApp(tk.Tk):
         super().__init__()
         self.title("Smart Scheduler")
         self.geometry("1100x700")
+        # --- Cambia el estilo visual aquí ---
+        self.configure(bg="#f5f6fa")
         self.style = ttk.Style(self)
-        self.style.theme_use('clam')
+        # Usa un tema más moderno si está disponible
+        if "clam" in self.style.theme_names():
+            self.style.theme_use('clam')
+        # Colores personalizados para widgets ttk
+        self.style.configure('.', background="#f5f6fa", foreground="#222", font=("Segoe UI", 11))
+        self.style.configure('TFrame', background="#f5f6fa")
+        self.style.configure('TLabel', background="#f5f6fa", foreground="#222", font=("Segoe UI", 12))
+        self.style.configure('TButton', background="#4078c0", foreground="#fff", font=("Segoe UI", 11, "bold"), borderwidth=0, focusthickness=2, focuscolor="#4078c0")
+        self.style.map('TButton',
+            background=[('active', '#305080'), ('!active', '#4078c0')],
+            foreground=[('active', '#fff'), ('!active', '#fff')]
+        )
+        self.style.configure('Treeview', background="#fff", fieldbackground="#fff", foreground="#222", font=("Segoe UI", 11))
+        self.style.configure('Treeview.Heading', background="#4078c0", foreground="#fff", font=("Segoe UI", 11, "bold"))
+        self.style.map('Treeview.Heading', background=[('active', '#305080')])
+        self.style.configure('TCheckbutton', background="#f5f6fa", font=("Segoe UI", 11))
+        self.style.configure('TCombobox', fieldbackground="#fff", background="#fff", font=("Segoe UI", 11))
         # Estado global
         self.clases: List[Clase] = []
         self.config_horario = config_horario
@@ -439,19 +457,19 @@ class SmartSchedulerApp(tk.Tk):
 
     def init_ui(self):
         # Navegador de secciones
-        nav = ttk.Frame(self)
+        nav = ttk.Frame(self, style='TFrame')
         nav.pack(side='left', fill='y', padx=5, pady=5)
-        self.main_frame = ttk.Frame(self)
+        self.main_frame = ttk.Frame(self, style='TFrame')
         self.main_frame.pack(side='right', fill='both', expand=True)
         # Botones de navegación
         secciones = [
             ("Clases", self.show_clases),
             ("Configuración Horario", self.show_config_horario),
-            ("Soluciones", self.show_soluciones)  # show_soluciones ahora genera y muestra
+            ("Soluciones", self.show_soluciones)
         ]
         for i, (nombre, fn) in enumerate(secciones):
-            btn = ttk.Button(nav, text=nombre, command=fn)
-            btn.pack(fill='x', pady=2)
+            btn = ttk.Button(nav, text=nombre, command=fn, style='TButton')
+            btn.pack(fill='x', pady=6, padx=4, ipady=6)
         self.show_clases()
 
     def clear_main(self):
@@ -480,23 +498,23 @@ class SmartSchedulerApp(tk.Tk):
     # ========== SECCIÓN CLASES ==========
     def show_clases(self):
         self.clear_main()
-        frm = ttk.Frame(self.main_frame)
+        frm = ttk.Frame(self.main_frame, style='TFrame')
         frm.pack(fill='both', expand=True, padx=10, pady=10)
-        ttk.Label(frm, text="Clases", font=("Helvetica", 16)).pack(anchor='w')
+        ttk.Label(frm, text="Clases", font=("Segoe UI", 18, "bold"), style='TLabel').pack(anchor='w', pady=(0, 8))
         # Tabla de clases
-        tree = ttk.Treeview(frm, columns=("Siglas", "Maestro", "Configuraciones", "Varía Maestro", "Varía Nombre", "N Huecos"), show="headings")
+        tree = ttk.Treeview(frm, columns=("Siglas", "Maestro", "Configuraciones", "Varía Maestro", "Varía Nombre", "N Huecos"), show="headings", style='Treeview')
         for col in tree["columns"]:
             tree.heading(col, text=col)
         tree.pack(fill='both', expand=True, pady=10)
         self.refrescar(tree)
         # Botones
-        btns = ttk.Frame(frm)
-        btns.pack()
-        ttk.Button(btns, text="Agregar Clase", command=lambda: self.agregar_clase(tree)).pack(side='left', padx=5)
-        ttk.Button(btns, text="Editar Clase", command=lambda: self.editar_clase(tree)).pack(side='left', padx=5)
-        ttk.Button(btns, text="Eliminar Clase", command=lambda: self.eliminar_clase(tree)).pack(side='left', padx=5)
-        ttk.Button(btns, text="Guardar Clases", command=lambda: self.guardar_clases()).pack(side='left', padx=5)
-        ttk.Button(btns, text="Cargar Clases", command=lambda: self.cargar_clases(tree)).pack(side='left', padx=5)
+        btns = ttk.Frame(frm, style='TFrame')
+        btns.pack(pady=8)
+        ttk.Button(btns, text="Agregar Clase", command=lambda: self.agregar_clase(tree), style='TButton').pack(side='left', padx=6, ipadx=8)
+        ttk.Button(btns, text="Editar Clase", command=lambda: self.editar_clase(tree), style='TButton').pack(side='left', padx=6, ipadx=8)
+        ttk.Button(btns, text="Eliminar Clase", command=lambda: self.eliminar_clase(tree), style='TButton').pack(side='left', padx=6, ipadx=8)
+        ttk.Button(btns, text="Guardar Clases", command=lambda: self.guardar_clases(), style='TButton').pack(side='left', padx=6, ipadx=8)
+        ttk.Button(btns, text="Cargar Clases", command=lambda: self.cargar_clases(tree), style='TButton').pack(side='left', padx=6, ipadx=8)
         # Elimina el botón "Generar Horarios"
         # ttk.Button(btns, text="Generar Horarios", command=self.generar_soluciones).pack(side='left', padx=5)
 
