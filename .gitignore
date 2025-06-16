@@ -161,3 +161,8 @@ cython_debug/
 *.png
 *.txt
 *.json
+
+# do not ignore smart-scheduler.png
+#  This file is used in the documentation and should not be ignored.
+#  If you want to ignore it, you can remove the following line.
+!smart-scheduler.png
