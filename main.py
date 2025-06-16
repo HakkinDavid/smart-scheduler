@@ -673,7 +673,87 @@ class SmartSchedulerApp(tk.Tk):
             añadir_fila_cfg()
         actualizar_encabezado()
 
+        # --- Validación y botón Guardar ---
+        btn_confirmar = tk.Button(frm, text="Confirmar")
+        btn_confirmar.grid(row=9, column=0, columnspan=2)
+        btn_cancelar = tk.Button(frm, text="Cancelar", command=self.show_clases)
+        btn_cancelar.grid(row=10, column=0, columnspan=2)
+
+        def validar():
+            nombre = e_nombre.get().strip()
+            siglas = e_siglas.get().strip() or nombre[:3].upper()
+            maestro = e_maestro.get().strip()
+            try:
+                n_huecos = int(e_nhuecos.get())
+            except Exception:
+                n_huecos = 2
+            # Validar campos principales
+            if not nombre or not siglas or not maestro:
+                return False
+            # Validar al menos una configuración válida
+            alguna_cfg_valida = False
+            for e_nombre_cfg, dia_boxes, hueco_boxes, e_maestro_cfg, e_nombre_curso_cfg in campos_cfg:
+                nombre_cfg = e_nombre_cfg.get().strip()
+                huecos = []
+                for dia_box, hueco_box in zip(dia_boxes, hueco_boxes):
+                    dia = dia_box.get().strip()
+                    hueco = hueco_box.get().strip()
+                    if not dia or not hueco:
+                        continue
+                    huecos.append((dia, hueco))
+                if len(huecos) == n_huecos and nombre_cfg:
+                    alguna_cfg_valida = True
+                # Si varía maestro/nombre, validar que no estén vacíos si el campo existe
+                if var_maestro_cfg.get() and e_maestro_cfg and not e_maestro_cfg.get().strip():
+                    return False
+                if var_nombre_cfg.get() and e_nombre_curso_cfg and not e_nombre_curso_cfg.get().strip():
+                    return False
+            return alguna_cfg_valida
+
+        def on_validate_change(*_):
+            if validar():
+                btn_confirmar.config(state="normal")
+            else:
+                btn_confirmar.config(state="disabled")
+
+        # Bindings para validación en tiempo real
+        e_nombre.bind("<KeyRelease>", lambda e: on_validate_change())
+        e_siglas.bind("<KeyRelease>", lambda e: on_validate_change())
+        e_maestro.bind("<KeyRelease>", lambda e: on_validate_change())
+        e_nhuecos.bind("<<ComboboxSelected>>", lambda e: on_validate_change())
+        var_maestro_cfg.trace_add('write', lambda *_: on_validate_change())
+        var_nombre_cfg.trace_add('write', lambda *_: on_validate_change())
+        # También para cada campo de configuración
+        def bind_cfg_fields():
+            for campo in campos_cfg:
+                e_nombre_cfg, dia_boxes, hueco_boxes, e_maestro_cfg, e_nombre_curso_cfg = campo
+                e_nombre_cfg.bind("<KeyRelease>", lambda e: on_validate_change())
+                for dia_box in dia_boxes:
+                    dia_box.bind("<<ComboboxSelected>>", lambda e: on_validate_change())
+                for hueco_box in hueco_boxes:
+                    hueco_box.bind("<<ComboboxSelected>>", lambda e: on_validate_change())
+                if e_maestro_cfg:
+                    e_maestro_cfg.bind("<KeyRelease>", lambda e: on_validate_change())
+                if e_nombre_curso_cfg:
+                    e_nombre_curso_cfg.bind("<KeyRelease>", lambda e: on_validate_change())
+        # Llamar después de añadir cada fila
+        old_añadir_fila_cfg = añadir_fila_cfg
+        def añadir_fila_cfg_y_bind(c=None):
+            old_añadir_fila_cfg(c)
+            bind_cfg_fields()
+            on_validate_change()
+        añadir_fila_cfg = añadir_fila_cfg_y_bind
+        # Reemplazar el botón para usar la nueva función
+        btn_add.config(command=añadir_fila_cfg)
+
+        # Inicializar validación
+        bind_cfg_fields()
+        on_validate_change()
+
         def confirmar():
+            if not validar():
+                messagebox.showerror("Datos incompletos", "Por favor completa todos los campos obligatorios y al menos una configuración válida.")
+                return
             nombre = e_nombre.get().strip()
             siglas = e_siglas.get().strip() or nombre[:3].upper()
             maestro = e_maestro.get().strip()
@@ -719,9 +799,7 @@ class SmartSchedulerApp(tk.Tk):
             self.refrescar(tree)
             self.show_clases()
 
-        tk.Button(frm, text="Confirmar", command=confirmar).grid(row=9, column=0, columnspan=2)
-        tk.Button(frm, text="Cancelar", command=self.show_clases).grid(row=10, column=0, columnspan=2)
-
+        btn_confirmar.config(command=confirmar)
     def agregar_clase(self, tree):
         self.clase_form(tree, clase=None)
 
