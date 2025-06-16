@@ -300,8 +300,8 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario):
         maestro = cfg.maestro if cfg.maestro else None
         if not maestro:
             clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
-            if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestra:
-                maestro = clase_obj.maestra
+            if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
+                maestro = clase_obj.maestro
             else:
                 maestro = "(sin maestro)"
         maestro_str = maestro if maestro else "(sin maestro)"
@@ -417,7 +417,7 @@ class SmartSchedulerApp(tk.Tk):
         secciones = [
             ("Clases", self.show_clases),
             ("Configuración Horario", self.show_config_horario),
-            ("Soluciones", self.show_soluciones)
+            ("Soluciones", self.show_soluciones)  # show_soluciones ahora genera y muestra
         ]
         for i, (nombre, fn) in enumerate(secciones):
             btn = ttk.Button(nav, text=nombre, command=fn)
@@ -467,8 +467,8 @@ class SmartSchedulerApp(tk.Tk):
         ttk.Button(btns, text="Eliminar Clase", command=lambda: self.eliminar_clase(tree)).pack(side='left', padx=5)
         ttk.Button(btns, text="Guardar Clases", command=lambda: self.guardar_clases()).pack(side='left', padx=5)
         ttk.Button(btns, text="Cargar Clases", command=lambda: self.cargar_clases(tree)).pack(side='left', padx=5)
-        # Botón para generar horarios
-        ttk.Button(btns, text="Generar Horarios", command=self.generar_soluciones).pack(side='left', padx=5)
+        # Elimina el botón "Generar Horarios"
+        # ttk.Button(btns, text="Generar Horarios", command=self.generar_soluciones).pack(side='left', padx=5)
 
     def guardar_clases(self):
         ruta = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
@@ -899,6 +899,9 @@ class SmartSchedulerApp(tk.Tk):
 
     # ========== SECCIÓN SOLUCIONES ==========
     def show_soluciones(self):
+        # Al entrar a esta sección, siempre genera soluciones y muestra la vista
+        self.soluciones = [evaluar(sol, self.config_horario) for sol in generar_globales(self.clases)]
+        self.soluciones.sort(key=lambda x: x.puntuacion, reverse=True)
         self.clear_main()
         frm = ttk.Frame(self.main_frame)
         frm.pack(fill='both', expand=True, padx=10, pady=10)
@@ -994,8 +997,8 @@ class SmartSchedulerApp(tk.Tk):
             maestro = cfg.maestro if cfg.maestro else None
             if not maestro:
                 clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
-                if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestra:
-                    maestro = clase_obj.maestra
+                if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
+                    maestro = clase_obj.maestro
                 else:
                     maestro = "(sin maestro)"
             maestro_str = maestro if maestro else "(sin maestro)"
@@ -1054,8 +1057,8 @@ class SmartSchedulerApp(tk.Tk):
                 maestro = cfg.maestro if cfg.maestro else None
                 if not maestro:
                     clase_obj = next((c for c in sol.asignacion.values() if c.nombre == cfg.nombre), None)
-                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestra:
-                        maestro = clase_obj.maestra
+                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
+                        maestro = clase_obj.maestro
                     else:
                         maestro = "(sin maestro)"
                 maestro_str = maestro if maestro else "(sin maestro)"
