@@ -243,6 +243,7 @@ def representar_matriz(solucion: Dict[str, ConfiguracionClase], config: ConfigHo
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import random
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], config: ConfigHorario):
     """
@@ -263,7 +264,11 @@ def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], conf
                 leyenda[i][j] = {'clase': clase, 'cfg': cfg.nombre}
     return matriz, leyenda
 
-def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario):
+def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame=None):
+    """
+    Renderiza la matriz de horarios en un FigureCanvasTkAgg dentro de parent_frame si se provee,
+    o muestra con plt.show() si no se provee (modo legacy).
+    """
     matriz, leyenda = representar_matriz_con_leyenda(solucion.asignacion, config)
     fig, ax = plt.subplots(figsize=(2+len(config.dias)*1.5, 2+len(config.huecos)))
     clases = list(solucion.asignacion.keys())
@@ -307,9 +312,17 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario):
         maestro_str = maestro if maestro else "(sin maestro)"
         label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
         legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
-    plt.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    ax.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.tight_layout()
-    plt.show()
+    if parent_frame is not None:
+        # Limpia el frame antes de insertar el canvas
+        for widget in parent_frame.winfo_children():
+            widget.destroy()
+        canvas = FigureCanvasTkAgg(fig, master=parent_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill='both', expand=True)
+    else:
+        plt.show()
 
 # === Funciones para guardar y cargar datos en JSON ===
 import json
@@ -893,9 +906,15 @@ class SmartSchedulerApp(tk.Tk):
         ttk.Button(frm, text="Ver Solución", command=lambda: self.ver_solucion(mejor)).pack(pady=10)
 
     def ver_solucion(self, solucion):
-        ventana_sol = tk.Toplevel(self)
-        ventana_sol.title("Solución Generada")
-        mostrar_matriz_color(solucion, self.config_horario)
+        # Ahora muestra en la ventana principal, no en ventana emergente
+        self.clear_main()
+        frm = ttk.Frame(self.main_frame)
+        frm.pack(fill='both', expand=True, padx=10, pady=10)
+        ttk.Label(frm, text="Solución Generada", font=("Helvetica", 16)).pack(anchor='w')
+        canvas_frame = ttk.Frame(frm)
+        canvas_frame.pack(fill='both', pady=5, expand=True)
+        mostrar_matriz_color(solucion, self.config_horario, parent_frame=canvas_frame)
+        ttk.Button(frm, text="Volver", command=self.show_soluciones).pack(pady=10)
 
     # ========== SECCIÓN SOLUCIONES ==========
     def show_soluciones(self):
@@ -936,10 +955,10 @@ class SmartSchedulerApp(tk.Tk):
         idx = getattr(self, "idx_solucion", 0)
         total = len(self.soluciones)
         ttk.Label(frm, text=f"Solución {idx+1} / {total} - Puntuación: {solucion.puntuacion}", font=("Helvetica", 14)).pack(anchor='w')
-        # Matriz visual
+        # Matriz visual en canvas embebido
         canvas_frame = ttk.Frame(frm)
-        canvas_frame.pack(fill='x', pady=5)
-        mostrar_matriz_color(solucion, self.config_horario)
+        canvas_frame.pack(fill='both', pady=5, expand=True)
+        mostrar_matriz_color(solucion, self.config_horario, parent_frame=canvas_frame)
         # Detalles de comodidad
         detalles = solucion.detalle
         detalles_str = ""
@@ -1057,8 +1076,8 @@ class SmartSchedulerApp(tk.Tk):
                 maestro = cfg.maestro if cfg.maestro else None
                 if not maestro:
                     clase_obj = next((c for c in sol.asignacion.values() if c.nombre == cfg.nombre), None)
-                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
-                        maestro = clase_obj.maestro
+                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestra:
+                        maestro = clase_obj.maestra
                     else:
                         maestro = "(sin maestro)"
                 maestro_str = maestro if maestro else "(sin maestro)"
