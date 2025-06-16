@@ -302,13 +302,30 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame
         nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
         siglas = clase
         curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
-        maestro = cfg.maestro if cfg.maestro else None
+        # Maestro: usa el de la configuración, si no, el global del curso
+        maestro = cfg.maestro
         if not maestro:
-            clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
-            if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
-                maestro = clase_obj.maestro
-            else:
-                maestro = "(sin maestro)"
+            # Buscar el objeto Clase correspondiente
+            clase_obj = None
+            for c in solucion.asignacion:
+                if c == clase:
+                    # Buscar en la lista de clases global
+                    # self.clases no está disponible aquí, así que buscar en asignación
+                    break
+            # Buscar en la lista de clases global
+            # Se asume que el nombre de la clase es único
+            global_maestro = None
+            # Buscar en la lista de clases global (hack: usar variable global si existe)
+            try:
+                app = tk._default_root
+                if hasattr(app, "clases"):
+                    for cobj in app.clases:
+                        if cobj.nombre == clase:
+                            global_maestro = cobj.maestro
+                            break
+            except Exception:
+                pass
+            maestro = global_maestro if global_maestro else "(sin maestro)"
         maestro_str = maestro if maestro else "(sin maestro)"
         label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
         legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
