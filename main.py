@@ -282,7 +282,7 @@ def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], conf
 def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame=None):
     """
     Renderiza la matriz de horarios en un FigureCanvasTkAgg dentro de parent_frame si se provee,
-    o muestra con plt.show() si no se provee (modo legacy).
+    o no muestra nada si no se provee (prohibido plt.show() para evitar cambio de ícono).
     """
     matriz, leyenda = representar_matriz_con_leyenda(solucion.asignacion, config)
     fig, ax = plt.subplots(figsize=(2+len(config.dias)*1.5, 2+len(config.huecos)))
@@ -317,20 +317,13 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame
         nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
         siglas = clase
         curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
-        # Maestro: usa el de la configuración, si no, el global del curso
         maestro = cfg.maestro
         if not maestro:
-            # Buscar el objeto Clase correspondiente
             clase_obj = None
             for c in solucion.asignacion:
                 if c == clase:
-                    # Buscar en la lista de clases global
-                    # self.clases no está disponible aquí, así que buscar en asignación
                     break
-            # Buscar en la lista de clases global
-            # Se asume que el nombre de la clase es único
             global_maestro = None
-            # Buscar en la lista de clases global (hack: usar variable global si existe)
             try:
                 app = tk._default_root
                 if hasattr(app, "clases"):
@@ -353,15 +346,11 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame
         canvas = FigureCanvasTkAgg(fig, master=parent_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill='both', expand=True)
-        # --- Reaplica el ícono tras crear el canvas de matplotlib ---
         reaplicar_icono_app(parent_frame.winfo_toplevel())
     else:
-        plt.show()
-        # --- Reaplica el ícono tras mostrar la figura ---
-        try:
-            reaplicar_icono_app(tk._default_root)
-        except Exception:
-            pass
+        # NO mostrar la figura nunca fuera de Tkinter, para evitar el cambio de ícono
+        # plt.show()  # <- PROHIBIDO
+        pass
 
 # === Funciones para guardar y cargar datos en JSON ===
 import json
