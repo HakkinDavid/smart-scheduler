@@ -279,13 +279,17 @@ def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], conf
                 leyenda[i][j] = {'clase': clase, 'cfg': cfg.nombre}
     return matriz, leyenda
 
-def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame=None):
+def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame=None, fig_ax=None, return_fig=False):
     """
     Renderiza la matriz de horarios en un FigureCanvasTkAgg dentro de parent_frame si se provee,
-    o no muestra nada si no se provee (prohibido plt.show() para evitar cambio de ícono).
+    o retorna la figura si return_fig=True.
+    Si fig_ax se provee, usa esa figura y axes.
     """
     matriz, leyenda = representar_matriz_con_leyenda(solucion.asignacion, config)
-    fig, ax = plt.subplots(figsize=(2+len(config.dias)*1.5, 2+len(config.huecos)))
+    if fig_ax is not None:
+        fig, ax = fig_ax
+    else:
+        fig, ax = plt.subplots(figsize=(2+len(config.dias)*1.5, 2+len(config.huecos)))
     clases = list(solucion.asignacion.keys())
     random.seed(42)
     colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
@@ -307,9 +311,9 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame
     )
     table.scale(1, 2)
     for key, cell in table.get_celld().items():
-        cell.set_fontsize(14)
+        cell.set_fontsize(14 if not fig_ax else 18)
     ax.axis('off')
-    plt.title(f'Configuración global - Puntuación: {solucion.puntuacion}')
+    plt.title(f'Configuración global - Puntuación: {solucion.puntuacion}' if not fig_ax else f'Solución - Puntuación: {solucion.puntuacion}')
     # Leyenda mejorada
     legend_handles = []
     for clase, color in colores_asignados.items():
@@ -347,10 +351,8 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame
         canvas.draw()
         canvas.get_tk_widget().pack(fill='both', expand=True)
         reaplicar_icono_app(parent_frame.winfo_toplevel())
-    else:
-        # NO mostrar la figura nunca fuera de Tkinter, para evitar el cambio de ícono
-        # plt.show()  # <- PROHIBIDO
-        pass
+    if return_fig:
+        return fig
 
 # === Funciones para guardar y cargar datos en JSON ===
 import json
@@ -716,16 +718,13 @@ class SmartSchedulerApp(tk.Tk):
 
         def validar():
             nombre = e_nombre.get().strip()
-            siglas = e_siglas.get().strip() or nombre[:3].upper()
-            maestro = e_maestro.get().strip()
+            # siglas y maestro ya no son obligatorios
             try:
                 n_huecos = int(e_nhuecos.get())
             except Exception:
                 n_huecos = 2
-            # Validar campos principales
-            if not nombre or not siglas or not maestro:
+            if not nombre:
                 return False
-            # Validar al menos una configuración válida
             alguna_cfg_valida = False
             for e_nombre_cfg, dia_boxes, hueco_boxes, e_maestro_cfg, e_nombre_curso_cfg in campos_cfg:
                 nombre_cfg = e_nombre_cfg.get().strip()
@@ -738,7 +737,6 @@ class SmartSchedulerApp(tk.Tk):
                     huecos.append((dia, hueco))
                 if len(huecos) == n_huecos and nombre_cfg:
                     alguna_cfg_valida = True
-                # Si varía maestro/nombre, validar que no estén vacíos si el campo existe
                 if var_maestro_cfg.get() and e_maestro_cfg and not e_maestro_cfg.get().strip():
                     return False
                 if var_nombre_cfg.get() and e_nombre_curso_cfg and not e_nombre_curso_cfg.get().strip():
@@ -790,8 +788,8 @@ class SmartSchedulerApp(tk.Tk):
                 messagebox.showerror("Datos incompletos", "Por favor completa todos los campos obligatorios y al menos una configuración válida.")
                 return
             nombre = e_nombre.get().strip()
-            siglas = e_siglas.get().strip() or nombre[:3].upper()
-            maestro = e_maestro.get().strip()
+            siglas = e_siglas.get().strip() or (nombre[:3].upper() if nombre else "")
+            maestro = e_maestro.get().strip()  # Puede quedar vacío
             try:
                 n_huecos = int(e_nhuecos.get())
             except Exception:
@@ -831,7 +829,9 @@ class SmartSchedulerApp(tk.Tk):
                 self.clases[i] = nueva
             else:
                 self.clases.append(nueva)
-            self.refrescar(tree)
+            # Solo refresca el tree si sigue existiendo (está en la vista actual)
+            if tree.winfo_exists():
+                self.refrescar(tree)
             self.show_clases()
 
         btn_confirmar.config(command=confirmar)
@@ -997,7 +997,6 @@ class SmartSchedulerApp(tk.Tk):
             # Etiquetas de tiempo para cada hueco (wrap)
             ltitle = tk.Label(etiquetas_huecos_frame, text="Etiquetas de tiempo para cada hueco:")
             ltitle.grid(row=0, column=0, sticky='w')
-            etiquetas_huecos_labels.append(ltitle)
             max_por_fila = 6
             for idx, hq in enumerate(huecos):
                 l = tk.Label(etiquetas_huecos_frame, text=f"{hq}: {etiquetas[hq]}", relief='groove', padx=4)
@@ -1117,52 +1116,8 @@ class SmartSchedulerApp(tk.Tk):
 
     def exportar_solucion(self):
         solucion = self.soluciones[self.idx_solucion]
-        matriz, leyenda = representar_matriz_con_leyenda(solucion.asignacion, self.config_horario)
-        fig, ax = plt.subplots(figsize=(2+len(self.config_horario.dias)*1.5, 2+len(self.config_horario.huecos)))
-        clases_ = list(solucion.asignacion.keys())
-        random.seed(42)
-        colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
-        colores_asignados = {clase: colores[i % len(colores)] for i, clase in enumerate(clases_)}
-        dia_labels = self.config_horario.dias
-        hueco_labels = [self.config_horario.etiquetas_huecos.get(h, h) for h in self.config_horario.huecos]
-        def get_color(i, j):
-            ley = leyenda[i][j]
-            if isinstance(ley, dict) and 'clase' in ley:
-                return colores_asignados.get(ley['clase'], 'white')
-            return 'white'
-        table = ax.table(
-            cellText=matriz,
-            cellColours=[
-                [get_color(i, j) for j in range(len(self.config_horario.dias))]
-                for i in range(len(self.config_horario.huecos))
-            ],
-            rowLabels=hueco_labels, colLabels=dia_labels,
-            loc='center', cellLoc='center'
-        )
-        table.scale(1, 2)
-        for key, cell in table.get_celld().items():
-            cell.set_fontsize(18)
-        ax.axis('off')
-        plt.title(f'Solución {self.idx_solucion+1} - Puntuación: {solucion.puntuacion}')
-        # Leyenda igual que en mostrar_matriz_color
-        legend_handles = []
-        for clase, color in colores_asignados.items():
-            cfg = solucion.asignacion[clase]
-            nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
-            siglas = clase
-            curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
-            maestro = cfg.maestro if cfg.maestro else None
-            if not maestro:
-                clase_obj = next((c for c in solucion.asignacion.values() if c.nombre == cfg.nombre), None)
-                if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
-                    maestro = clase_obj.maestro
-                else:
-                    maestro = "(sin maestro)"
-            maestro_str = maestro if maestro else "(sin maestro)"
-            label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
-            legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
-        plt.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-        plt.tight_layout()
+        # Usar mostrar_matriz_color para obtener la figura
+        fig = mostrar_matriz_color(solucion, self.config_horario, parent_frame=None, fig_ax=None, return_fig=True)
         path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG", "*.png")])
         if path:
             fig.savefig(path)
@@ -1172,59 +1127,15 @@ class SmartSchedulerApp(tk.Tk):
                 for k, v in solucion.detalle.items():
                     f.write(f"{k}: {v}\n")
             messagebox.showinfo("Exportado", f"PNG y análisis TXT guardados.")
-            # --- Reaplica el ícono tras guardar/exportar ---
             reaplicar_icono_app(self)
+        plt.close(fig)
 
     def exportar_todo_en_lote(self):
         carpeta = filedialog.askdirectory()
         if not carpeta:
             return
         for i, sol in enumerate(self.soluciones, 1):
-            matriz, leyenda = representar_matriz_con_leyenda(sol.asignacion, self.config_horario)
-            fig, ax = plt.subplots(figsize=(2+len(self.config_horario.dias)*1.5, 2+len(self.config_horario.huecos)))
-            clases_ = list(sol.asignacion.keys())
-            random.seed(42)
-            colores = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
-            colores_asignados = {clase: colores[j % len(colores)] for j, clase in enumerate(clases_)}
-            dia_labels = self.config_horario.dias
-            hueco_labels = [self.config_horario.etiquetas_huecos.get(h, h) for h in self.config_horario.huecos]
-            def get_color(ii, jj):
-                ley = leyenda[ii][jj]
-                if isinstance(ley, dict) and 'clase' in ley:
-                    return colores_asignados.get(ley['clase'], 'white')
-                return 'white'
-            table = ax.table(
-                cellText=matriz,
-                cellColours=[
-                    [get_color(ii, jj) for jj in range(len(self.config_horario.dias))]
-                    for ii in range(len(self.config_horario.huecos))
-                ],
-                rowLabels=hueco_labels, colLabels=dia_labels,
-                loc='center', cellLoc='center'
-            )
-            table.scale(1, 2)
-            for key, cell in table.get_celld().items():
-                cell.set_fontsize(18)
-            ax.axis('off')
-            plt.title(f'Solución {i} - Puntuación: {sol.puntuacion}')
-            legend_handles = []
-            for clase, color in colores_asignados.items():
-                cfg = sol.asignacion[clase]
-                nombre_curso = cfg.nombre_curso if cfg.nombre_curso else clase
-                siglas = clase
-                curso_str = nombre_curso if nombre_curso == siglas else f"{nombre_curso} ({siglas})"
-                maestro = cfg.maestro if cfg.maestro else None
-                if not maestro:
-                    clase_obj = next((c for c in sol.asignacion.values() if c.nombre == cfg.nombre), None)
-                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
-                        maestro = clase_obj.maestro
-                    else:
-                        maestro = "(sin maestro)"
-                maestro_str = maestro if maestro else "(sin maestro)"
-                label = f"{curso_str}\n{maestro_str}\n{cfg.nombre}"
-                legend_handles.append(plt.Line2D([0], [0], marker='s', color='w', label=label, markerfacecolor=color, markersize=15))
-            plt.legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-            plt.tight_layout()
+            fig = mostrar_matriz_color(sol, self.config_horario, parent_frame=None, fig_ax=None, return_fig=True)
             nombre_base = f"solucion_{i}_p{sol.puntuacion}"
             path_img = f"{carpeta}/{nombre_base}.png"
             path_txt = f"{carpeta}/{nombre_base}.txt"
@@ -1233,8 +1144,8 @@ class SmartSchedulerApp(tk.Tk):
                 f.write(f"Puntuación: {sol.puntuacion}\n\n")
                 for k, v in sol.detalle.items():
                     f.write(f"{k}: {v}\n")
+            plt.close(fig)
         messagebox.showinfo("Exportado", f"Se guardaron {len(self.soluciones)} soluciones en {carpeta}")
-        # --- Reaplica el ícono tras guardar/exportar ---
         reaplicar_icono_app(self)
 
     def _on_close(self):
