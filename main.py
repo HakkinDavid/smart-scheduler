@@ -15,11 +15,14 @@ La aplicación:
 """
 # ============================================================================================
 
-import itertools
 import sys
 from typing import List, Tuple, Dict, NamedTuple, Any, Optional
 import datetime
 import os
+
+# --- Forzar backend TkAgg para evitar el ícono de matplotlib ---
+import matplotlib
+matplotlib.use('TkAgg')
 
 icon_path = os.path.join(os.path.dirname(__file__), 'smart-scheduler.png')
 
@@ -249,6 +252,14 @@ import matplotlib.colors as mcolors
 import random
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+# --- FUNCIÓN PARA REAPLICAR EL ÍCONO DE LA APP ---
+def reaplicar_icono_app(root):
+    try:
+        icon = tk.PhotoImage(file=icon_path)
+        root.iconphoto(True, icon)
+    except Exception as e:
+        print("No se pudo reaplicar el ícono:", e)
+
 def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], config: ConfigHorario):
     """
     Genera la matriz y la leyenda usando la configuración personalizada.
@@ -342,8 +353,15 @@ def mostrar_matriz_color(solucion: Solucion, config: ConfigHorario, parent_frame
         canvas = FigureCanvasTkAgg(fig, master=parent_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill='both', expand=True)
+        # --- Reaplica el ícono tras crear el canvas de matplotlib ---
+        reaplicar_icono_app(parent_frame.winfo_toplevel())
     else:
         plt.show()
+        # --- Reaplica el ícono tras mostrar la figura ---
+        try:
+            reaplicar_icono_app(tk._default_root)
+        except Exception:
+            pass
 
 # === Funciones para guardar y cargar datos en JSON ===
 import json
@@ -1165,6 +1183,8 @@ class SmartSchedulerApp(tk.Tk):
                 for k, v in solucion.detalle.items():
                     f.write(f"{k}: {v}\n")
             messagebox.showinfo("Exportado", f"PNG y análisis TXT guardados.")
+            # --- Reaplica el ícono tras guardar/exportar ---
+            reaplicar_icono_app(self)
 
     def exportar_todo_en_lote(self):
         carpeta = filedialog.askdirectory()
@@ -1225,6 +1245,8 @@ class SmartSchedulerApp(tk.Tk):
                 for k, v in sol.detalle.items():
                     f.write(f"{k}: {v}\n")
         messagebox.showinfo("Exportado", f"Se guardaron {len(self.soluciones)} soluciones en {carpeta}")
+        # --- Reaplica el ícono tras guardar/exportar ---
+        reaplicar_icono_app(self)
 
     def _on_close(self):
         # Cierra correctamente todos los canvas de matplotlib y termina el proceso
