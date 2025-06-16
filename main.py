@@ -260,7 +260,7 @@ def representar_matriz_con_leyenda(solucion: Dict[str, ConfiguracionClase], conf
             if dia_etiqueta in dia_idx and hueco in hueco_idx:
                 i = hueco_idx[hueco]
                 j = dia_idx[dia_etiqueta]
-                matriz[i][j] = f"{cfg.nombre_curso or clase} @ {cfg.nombre}"
+                matriz[i][j] = f"{cfg.nombre}"
                 leyenda[i][j] = {'clase': clase, 'cfg': cfg.nombre}
     return matriz, leyenda
 
@@ -734,6 +734,14 @@ class SmartSchedulerApp(tk.Tk):
         if not clase:
             return
         self.clase_form(tree, clase=clase)
+
+    def eliminar_clase(self, tree):
+        sel = tree.selection()
+        if not sel:
+            return
+        nombre = tree.item(sel[0], 'text')
+        self.clases = [c for c in self.clases if c.nombre != nombre]
+        self.refrescar(tree)
 
     # ========== SECCIÓN CONFIGURACIÓN HORARIO ==========
     def show_config_horario(self):
