@@ -19,6 +19,9 @@ import itertools
 import sys
 from typing import List, Tuple, Dict, NamedTuple, Any, Optional
 import datetime
+import os
+
+icon_path = os.path.join(os.path.dirname(__file__), 'smart-scheduler.png')
 
 def generar_nombres_huecos(n):
     """Genera nombres tipo A, B, ..., Z, AA, AB, ..., AZ, ..., ZZ, etc."""
@@ -427,6 +430,11 @@ class SmartSchedulerApp(tk.Tk):
         super().__init__()
         self.title("Smart Scheduler")
         self.geometry("1100x700")
+        try:
+            icon = tk.PhotoImage(file=icon_path)
+            self.iconphoto(True, icon)
+        except Exception as e:
+            print("No se pudo cargar el ícono:", e)
         # --- Cambia el estilo visual aquí ---
         self.configure(bg="#f5f6fa")
         self.style = ttk.Style(self)
