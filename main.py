@@ -1207,8 +1207,8 @@ class SmartSchedulerApp(tk.Tk):
                 maestro = cfg.maestro if cfg.maestro else None
                 if not maestro:
                     clase_obj = next((c for c in sol.asignacion.values() if c.nombre == cfg.nombre), None)
-                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestra:
-                        maestro = clase_obj.maestra
+                    if clase_obj and hasattr(clase_obj, 'maestro') and clase_obj.maestro:
+                        maestro = clase_obj.maestro
                     else:
                         maestro = "(sin maestro)"
                 maestro_str = maestro if maestro else "(sin maestro)"
